@@ -1,0 +1,2 @@
+total_products,total_customers,total_orders,total_sales,total_qty_sold,avg_list_price,avg_order_value,invalid_records,duplicate_records,outlier_records,pipeline_status
+503,19821,31465,109846381.4,274914,741.27,3491.07,0,0,18937,SUCCESS

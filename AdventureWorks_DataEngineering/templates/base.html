@@ -1,0 +1,199 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>{% block title %}AdventureWorks DE{% endblock %} — Pipeline Dashboard</title>
+  <meta name="description" content="AdventureWorks Data Engineering Pipeline Dashboard — Step 5">
+
+  <!-- Bootstrap Icons -->
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
+
+  <!-- Plotly -->
+  <script src="https://cdn.plot.ly/plotly-2.32.0.min.js"></script>
+
+  <!-- Dashboard CSS -->
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+  {% block head %}{% endblock %}
+</head>
+<body>
+
+<!-- ── SIDEBAR ──────────────────────────────────────────── -->
+<nav class="sidebar">
+  <div class="sidebar-brand">
+    <div class="brand-title">AdventureWorks</div>
+    <div class="brand-sub">Data Engineering Pipeline</div>
+    <div class="sidebar-badge">Step 5 — Dashboard</div>
+  </div>
+
+  <div class="sidebar-nav">
+    <div class="nav-section-label">Navigation</div>
+    <ul class="nav flex-column">
+      {% for endpoint, label, icon in nav_links %}
+      <li class="nav-item">
+        <a class="nav-link {% if request.endpoint == endpoint %}active{% endif %}"
+           href="{{ url_for(endpoint) }}">
+          <i class="bi {{ icon }}"></i>
+          {{ label }}
+        </a>
+      </li>
+      {% endfor %}
+      <li class="nav-item">
+        <a class="nav-link {% if request.endpoint == 'audit' %}active{% endif %}"
+           href="{{ url_for('audit') }}">
+          <i class="bi bi-journal-text"></i>
+          Audit Log
+        </a>
+      </li>
+    </ul>
+
+    <div class="nav-section-label" style="margin-top:16px;">Pipeline</div>
+    <ul class="nav flex-column">
+      <li class="nav-item">
+        <form action="{{ url_for('pipeline_run') }}" method="post" id="sidebar-run-form">
+          {% if pipeline_running %}
+          <button type="button" class="nav-link" style="width:100%;background:none;border:none;cursor:not-allowed;opacity:0.5;"
+                  title="Pipeline running…">
+            <i class="bi bi-hourglass-split" style="color:var(--warning);"></i>
+            Running…
+          </button>
+          {% else %}
+          <button type="submit" class="nav-link" style="width:100%;background:none;border:none;cursor:pointer;"
+                  onclick="return confirm('Run the full pipeline now?')">
+            <i class="bi bi-play-fill" style="color:var(--success);"></i>
+            Run Pipeline
+          </button>
+          {% endif %}
+        </form>
+      </li>
+    </ul>
+  </div>
+
+  <div class="sidebar-footer">
+    <div>Full Refresh Architecture</div>
+    <div style="margin-top:4px;">Local · Python · PostgreSQL</div>
+  </div>
+</nav>
+
+<!-- ── MAIN WRAPPER ──────────────────────────────────────── -->
+<div class="main-wrapper">
+
+  <!-- TOPBAR -->
+  <header class="topbar">
+    <div class="topbar-title">{% block page_title %}Dashboard{% endblock %}</div>
+    <div class="topbar-right">
+      <div class="pipeline-indicator">
+        <div class="pipeline-dot {% if pipeline_running %}running{% endif %}" id="pipeline-dot"></div>
+        <span id="pipeline-status-text">
+          {% if pipeline_running %}Pipeline Running…{% else %}Pipeline Idle{% endif %}
+        </span>
+      </div>
+      <span style="color:var(--border);font-size:0.75rem;">|</span>
+      <span style="font-size:0.75rem;color:var(--text-muted);">
+        <i class="bi bi-clock"></i>
+        <span id="live-clock"></span>
+      </span>
+    </div>
+  </header>
+
+  <!-- PAGE CONTENT -->
+  <main class="content">
+
+    <!-- Flash messages -->
+    {% with messages = get_flashed_messages(with_categories=true) %}
+      {% if messages %}
+        {% for category, message in messages %}
+          <div class="alert-de alert-{{ category if category in ['success','danger','warning','info'] else 'info' }}">
+            <span class="alert-icon">
+              {% if category == 'success' %}<i class="bi bi-check-circle-fill"></i>
+              {% elif category == 'danger' %}<i class="bi bi-x-circle-fill"></i>
+              {% elif category == 'warning' %}<i class="bi bi-exclamation-triangle-fill"></i>
+              {% else %}<i class="bi bi-info-circle-fill"></i>{% endif %}
+            </span>
+            <span>{{ message | safe }}</span>
+            <button class="alert-close" onclick="this.parentElement.style.display='none'">
+              <i class="bi bi-x"></i>
+            </button>
+          </div>
+        {% endfor %}
+      {% endif %}
+    {% endwith %}
+
+    <!-- Pipeline running banner -->
+    {% if pipeline_running %}
+    <div class="running-banner">
+      <i class="bi bi-hourglass-split"></i>
+      <span><strong>Pipeline is currently running.</strong> Data will refresh automatically when complete.</span>
+    </div>
+    {% endif %}
+
+    {% block content %}{% endblock %}
+  </main>
+</div>
+
+<!-- ── CONFIRM DELETE MODAL ──────────────────────────────── -->
+<div class="modal-de-overlay" id="delete-modal">
+  <div class="modal-de">
+    <h3><i class="bi bi-exclamation-triangle text-danger" style="margin-right:8px;"></i>Confirm Deletion</h3>
+    <p id="delete-modal-body">Are you sure you want to delete this record?
+       This will trigger a full pipeline rebuild.</p>
+    <div class="modal-actions">
+      <button class="btn-de btn-outline-de" onclick="closeDeleteModal()">Cancel</button>
+      <form id="delete-modal-form" method="post">
+        <button type="submit" class="btn-de btn-danger-de">
+          <i class="bi bi-trash"></i> Delete & Run Pipeline
+        </button>
+      </form>
+    </div>
+  </div>
+</div>
+
+<!-- ── SCRIPTS ───────────────────────────────────────────── -->
+<script src="{{ url_for('static', filename='js/dashboard.js') }}"></script>
+<script>
+  // Live clock
+  function updateClock() {
+    const now = new Date();
+    document.getElementById('live-clock').textContent =
+      now.toLocaleTimeString('en-GB', {hour12: false});
+  }
+  updateClock();
+  setInterval(updateClock, 1000);
+
+  // Poll pipeline status every 3s when running
+  {% if pipeline_running %}
+  const poller = setInterval(() => {
+    fetch('/api/pipeline/status')
+      .then(r => r.json())
+      .then(data => {
+        const dot  = document.getElementById('pipeline-dot');
+        const txt  = document.getElementById('pipeline-status-text');
+        if (!data.running) {
+          clearInterval(poller);
+          dot.classList.remove('running');
+          txt.textContent = 'Pipeline Idle';
+          window.location.reload();
+        }
+      });
+  }, 3000);
+  {% endif %}
+
+  // Delete modal
+  function confirmDelete(url, label) {
+    document.getElementById('delete-modal-body').textContent =
+      'Are you sure you want to delete ' + label + '? This will trigger a full pipeline rebuild.';
+    document.getElementById('delete-modal-form').action = url;
+    document.getElementById('delete-modal').classList.add('open');
+  }
+
+  function closeDeleteModal() {
+    document.getElementById('delete-modal').classList.remove('open');
+  }
+
+  document.getElementById('delete-modal').addEventListener('click', function(e) {
+    if (e.target === this) closeDeleteModal();
+  });
+</script>
+{% block scripts %}{% endblock %}
+</body>
+</html>

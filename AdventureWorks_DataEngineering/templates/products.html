@@ -1,0 +1,173 @@
+{% extends "base.html" %}
+
+{% block title %}Products Management{% endblock %}
+{% block page_title %}Products Inventory{% endblock %}
+
+{% block content %}
+
+<!-- ── PAGE HEADER ─────────────────────────────────────── -->
+<div class="page-header flex-between">
+  <div>
+    <h1>Products Directory</h1>
+    <p>Manage AdventureWorks products. All modifications save directly to Product.csv and trigger the batch pipeline.</p>
+  </div>
+  <div>
+    <a href="{{ url_for('add_product') }}" class="btn-de btn-primary-de">
+      <i class="bi bi-plus-lg"></i> Add Product
+    </a>
+  </div>
+</div>
+
+<!-- ── FILTERS & SEARCH ────────────────────────────────── -->
+<div class="panel" style="margin-bottom: 20px;">
+  <div class="panel-body flex-between" style="padding: 12px 20px;">
+    <!-- Client-side table search -->
+    <div class="search-bar">
+      <i class="bi bi-search"></i>
+      <input type="text" id="products-search" placeholder="Search products locally...">
+    </div>
+    
+    <!-- Server-side search form -->
+    <form action="{{ url_for('products') }}" method="get" class="flex-gap">
+      <input type="text" name="q" value="{{ search }}" class="form-control-de" 
+             placeholder="Search and reload..." style="width:200px; padding: 6px 12px; font-size: 0.825rem;">
+      <button type="submit" class="btn-de btn-outline-de btn-sm-de">Filter</button>
+      {% if search %}
+      <a href="{{ url_for('products') }}" class="btn-de btn-outline-de btn-sm-de text-danger">Clear</a>
+      {% endif %}
+    </form>
+  </div>
+</div>
+
+<!-- ── DATA TABLE ──────────────────────────────────────── -->
+<div class="panel">
+  <div class="panel-body" style="padding: 0;">
+    {% if rows %}
+    <div class="table-wrapper">
+      <table class="data-table" id="products-table">
+        <thead>
+          <tr>
+            <th>Actions</th>
+            <th>ProductID</th>
+            <th>Name</th>
+            <th>ProductNumber</th>
+            <th>Color</th>
+            <th>StandardCost</th>
+            <th>ListPrice</th>
+            <th>SafetyStockLevel</th>
+            <th>ReorderPoint</th>
+            <th>Weight</th>
+            <th>Size</th>
+            <th>MakeFlag</th>
+            <th>FinishedGoodsFlag</th>
+            <th>SizeUnit</th>
+            <th>WeightUnit</th>
+            <th>DaysToMfg</th>
+            <th>ProductLine</th>
+            <th>Class</th>
+            <th>Style</th>
+            <th>SubcategoryID</th>
+            <th>ModelID</th>
+            <th>SellStartDate</th>
+            <th>SellEndDate</th>
+            <th>DiscontinuedDate</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for r in rows %}
+          <tr>
+            <td>
+              <div class="flex-gap gap-2">
+                <a href="{{ url_for('edit_product', product_id=r.ProductID) }}" 
+                   class="btn-de btn-outline-de btn-sm-de" title="Edit product attributes">
+                  <i class="bi bi-pencil-square text-info"></i>
+                </a>
+                
+                <button type="button" class="btn-de btn-danger-de btn-sm-de" 
+                        onclick="confirmDelete('{{ url_for('delete_product', product_id=r.ProductID) }}', 'ProductID {{ r.ProductID }} ({{ r.Name }})')"
+                        title="Delete product">
+                  <i class="bi bi-trash"></i>
+                </button>
+              </div>
+            </td>
+            <td class="mono font-weight-bold">{{ r.ProductID }}</td>
+            <td style="min-width: 180px;"><strong>{{ r.Name }}</strong></td>
+            <td class="mono">{{ r.ProductNumber }}</td>
+            <td>
+              {% if r.Color %}
+              <span class="badge-status badge-muted" style="border-left: 4px solid {% if r.Color.lower() == 'black' %}#111{% elif r.Color.lower() == 'red' %}#ff1744{% elif r.Color.lower() == 'blue' %}#00e5ff{% elif r.Color.lower() == 'yellow' %}#ffab00{% elif r.Color.lower() == 'silver' %}#c0c0c0{% elif r.Color.lower() == 'white' %}#fff{% else %}#90c2a2{% endif %};">
+                {{ r.Color }}
+              </span>
+              {% else %}
+              <span class="text-muted">—</span>
+              {% endif %}
+            </td>
+            <td class="mono">${{ "{:,.2f}".format(r.StandardCost|float) if r.StandardCost else '0.00' }}</td>
+            <td class="mono">${{ "{:,.2f}".format(r.ListPrice|float) if r.ListPrice else '0.00' }}</td>
+            <td class="mono">{{ r.SafetyStockLevel }}</td>
+            <td class="mono">{{ r.ReorderPoint }}</td>
+            <td class="mono">{{ r.Weight if r.Weight else '—' }}</td>
+            <td class="mono">{{ r.Size if r.Size else '—' }}</td>
+            <td>
+              {% if r.MakeFlag == '1' %}
+              <span class="text-success"><i class="bi bi-check-circle-fill"></i> Mfg</span>
+              {% else %}
+              <span class="text-muted">Purchased</span>
+              {% endif %}
+            </td>
+            <td>
+              {% if r.FinishedGoodsFlag == '1' %}
+              <span class="badge-status badge-success">Saleable</span>
+              {% else %}
+              <span class="badge-status badge-muted">Component</span>
+              {% endif %}
+            </td>
+            <td class="mono">{{ r.SizeUnitMeasureCode if r.SizeUnitMeasureCode else '—' }}</td>
+            <td class="mono">{{ r.WeightUnitMeasureCode if r.WeightUnitMeasureCode else '—' }}</td>
+            <td class="mono">{{ r.DaysToManufacture }}</td>
+            <td class="mono">{{ r.ProductLine if r.ProductLine else '—' }}</td>
+            <td class="mono">{{ r.Class if r.Class else '—' }}</td>
+            <td class="mono">{{ r.Style if r.Style else '—' }}</td>
+            <td class="mono">{{ r.ProductSubcategoryID if r.ProductSubcategoryID else '—' }}</td>
+            <td class="mono">{{ r.ProductModelID if r.ProductModelID else '—' }}</td>
+            <td class="mono" style="font-size: 0.75rem;">{{ r.SellStartDate[:10] if r.SellStartDate else '—' }}</td>
+            <td class="mono" style="font-size: 0.75rem;">{{ r.SellEndDate[:10] if r.SellEndDate else '—' }}</td>
+            <td class="mono" style="font-size: 0.75rem;">{{ r.DiscontinuedDate[:10] if r.DiscontinuedDate else '—' }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    
+    <!-- Pagination bar -->
+    <div class="pagination-de">
+      {% if page > 1 %}
+      <a href="{{ url_for('products', page=page-1, q=search) }}" class="page-btn"><i class="bi bi-chevron-left"></i></a>
+      {% endif %}
+      
+      <span style="color:var(--text-secondary); font-size: 0.8rem; margin: 0 10px;">
+        Page <strong>{{ page }}</strong> of <strong>{{ pages }}</strong> ({{ total }} products)
+      </span>
+      
+      {% if page < pages %}
+      <a href="{{ url_for('products', page=page+1, q=search) }}" class="page-btn"><i class="bi bi-chevron-right"></i></a>
+      {% endif %}
+    </div>
+    
+    {% else %}
+    <div class="empty-state">
+      <i class="bi bi-box-seam" style="font-size: 3rem; color: var(--border);"></i>
+      <p>No products found in Product.csv.</p>
+    </div>
+    {% endif %}
+  </div>
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+  // Initialize client-side quick filter
+  initTableSearch('products-search', 'products-table');
+</script>
+{% endblock %}

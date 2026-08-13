@@ -1,0 +1,214 @@
+{% extends "base.html" %}
+
+{% block title %}Edit Customer {{ customer.CustomerID }}{% endblock %}
+{% block page_title %}Edit Customer{% endblock %}
+
+{% block content %}
+
+<!-- ── BREADCRUMB ─────────────────────────────────────── -->
+<div style="margin-bottom: 20px; font-size:0.825rem; color:var(--text-secondary);">
+  <a href="{{ url_for('customers') }}" style="color:var(--accent); text-decoration:none;">
+    <i class="bi bi-people"></i> Customers
+  </a>
+  <i class="bi bi-chevron-right" style="margin: 0 8px; font-size:0.7rem;"></i>
+  <span>Edit #{{ customer.CustomerID }}</span>
+</div>
+
+<!-- ── PAGE HEADER ─────────────────────────────────────── -->
+<div class="page-header flex-between">
+  <div>
+    <h1>Edit Customer <span class="code-val">{{ customer.CustomerID }}</span></h1>
+    <p>Modify fields below. Changes write to <span class="code-val">Customer.csv</span> then trigger the pipeline.</p>
+  </div>
+  <a href="{{ url_for('customers') }}" class="btn-de btn-outline-de">
+    <i class="bi bi-arrow-left"></i> Back to Customers
+  </a>
+</div>
+
+<!-- ── RECORD IDENTITY BANNER ────────────────────────── -->
+<div class="panel" style="margin-bottom: 20px; border-top-color: var(--accent);">
+  <div class="panel-body" style="padding: 14px 20px;">
+    <div style="display: flex; gap: 32px; align-items: center; flex-wrap: wrap;">
+      <div>
+        <div class="kpi-label">Customer ID</div>
+        <div class="mono font-weight-bold" style="font-size:1.3rem; color:var(--accent);">
+          {{ customer.CustomerID }}
+        </div>
+        <div class="form-hint-de">Read-only · Primary Key</div>
+      </div>
+      <div>
+        <div class="kpi-label">Account Number</div>
+        <div class="mono" style="font-size:1rem;">{{ customer.AccountNumber if customer.AccountNumber else '—' }}</div>
+      </div>
+      <div>
+        <div class="kpi-label">Territory</div>
+        <div>
+          {% if customer.TerritoryID %}
+          <span class="badge-status badge-muted">Territory {{ customer.TerritoryID }}</span>
+          {% else %}
+          <span class="text-muted">Unassigned</span>
+          {% endif %}
+        </div>
+      </div>
+      <div>
+        <div class="kpi-label">Person Link</div>
+        <div class="mono" style="font-size:0.9rem;">
+          {{ customer.PersonID if customer.PersonID else 'No person linked' }}
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ── EDIT FORM ──────────────────────────────────────── -->
+<form action="{{ url_for('edit_customer', customer_id=customer.CustomerID) }}" method="post" id="edit-customer-form">
+
+  <!-- ── EDITABLE RELATIONSHIPS ─────────────────────── -->
+  <div class="panel" style="margin-bottom: 24px;">
+    <div class="panel-header">
+      <div class="panel-title"><i class="bi bi-diagram-2"></i> Editable Relationship Fields</div>
+    </div>
+    <div class="panel-body">
+      <div style="display:grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 20px;">
+
+        <div class="form-group-de">
+          <label class="form-label-de" for="PersonID">PersonID</label>
+          <input type="number" id="PersonID" name="PersonID"
+                 class="form-control-de" min="1"
+                 value="{{ customer.PersonID }}">
+          <div class="form-hint-de">FK → Person. Leave blank for store-only customers.</div>
+        </div>
+
+        <div class="form-group-de">
+          <label class="form-label-de" for="StoreID">StoreID</label>
+          <input type="number" id="StoreID" name="StoreID"
+                 class="form-control-de" min="1"
+                 value="{{ customer.StoreID }}">
+          <div class="form-hint-de">FK → Store. Leave blank for individual customers.</div>
+        </div>
+
+        <div class="form-group-de">
+          <label class="form-label-de" for="TerritoryID">TerritoryID</label>
+          <input type="number" id="TerritoryID" name="TerritoryID"
+                 class="form-control-de" min="1"
+                 value="{{ customer.TerritoryID }}">
+          <div class="form-hint-de">Sales territory assignment (1–10).</div>
+        </div>
+
+        <div class="form-group-de">
+          <label class="form-label-de" for="AccountNumber">AccountNumber</label>
+          <input type="text" id="AccountNumber" name="AccountNumber"
+                 class="form-control-de"
+                 value="{{ customer.AccountNumber }}"
+                 maxlength="16">
+          <div class="form-hint-de">Business account number string.</div>
+        </div>
+
+      </div>
+    </div>
+  </div>
+
+  <!-- ── READ-ONLY SYSTEM FIELDS ───────────────────── -->
+  <div class="panel" style="margin-bottom: 24px;">
+    <div class="panel-header">
+      <div class="panel-title">
+        <i class="bi bi-lock-fill" style="color:var(--text-muted);"></i>
+        Read-Only Fields
+        <span style="font-weight:400; color:var(--text-muted); font-size:0.8rem; margin-left:8px;">
+          (automatically managed by the pipeline)
+        </span>
+      </div>
+    </div>
+    <div class="panel-body">
+      <div style="display:grid; grid-template-columns: 1fr 1fr; gap: 20px;">
+
+        <div class="form-group-de">
+          <label class="form-label-de">CustomerID</label>
+          <input type="text" class="form-control-de mono" 
+                 value="{{ customer.CustomerID }}" readonly
+                 style="background:var(--bg-elevated); cursor:not-allowed; opacity:0.7;">
+          <div class="form-hint-de">Primary key — immutable.</div>
+        </div>
+
+        <div class="form-group-de">
+          <label class="form-label-de">rowguid</label>
+          <input type="text" class="form-control-de mono"
+                 value="{{ customer.rowguid }}" readonly
+                 style="background:var(--bg-elevated); cursor:not-allowed; opacity:0.7; font-size:0.75rem;">
+          <div class="form-hint-de">UUID — set at creation, not editable.</div>
+        </div>
+
+        <div class="form-group-de">
+          <label class="form-label-de">ModifiedDate</label>
+          <input type="text" class="form-control-de mono"
+                 value="{{ customer.ModifiedDate }}" readonly
+                 style="background:var(--bg-elevated); cursor:not-allowed; opacity:0.7; font-size:0.82rem;">
+          <div class="form-hint-de">Auto-updated to current time on save.</div>
+        </div>
+
+      </div>
+    </div>
+  </div>
+
+  <!-- ── CHANGE DIFF PREVIEW ───────────────────────── -->
+  <div class="panel" style="margin-bottom: 24px; border-top-color: var(--warning);">
+    <div class="panel-header">
+      <div class="panel-title"><i class="bi bi-file-diff"></i> Current Record State</div>
+    </div>
+    <div class="panel-body">
+      <pre class="mono" style="font-size:0.78rem; line-height:1.6; background:var(--bg-elevated);
+           border:1px solid var(--border); border-radius:6px; padding:16px; overflow-x:auto; margin:0;">
+CustomerID    = {{ customer.CustomerID }}
+PersonID      = {{ customer.PersonID    if customer.PersonID    else '(null)' }}
+StoreID       = {{ customer.StoreID     if customer.StoreID     else '(null)' }}
+TerritoryID   = {{ customer.TerritoryID if customer.TerritoryID else '(null)' }}
+AccountNumber = {{ customer.AccountNumber if customer.AccountNumber else '(null)' }}
+rowguid       = {{ customer.rowguid if customer.rowguid else '(null)' }}
+ModifiedDate  = {{ customer.ModifiedDate if customer.ModifiedDate else '(null)' }}</pre>
+    </div>
+  </div>
+
+  <!-- ── DANGER ZONE ───────────────────────────────── -->
+  <div class="panel" style="margin-bottom: 24px; border-top-color: var(--danger);">
+    <div class="panel-header">
+      <div class="panel-title" style="color:var(--danger);"><i class="bi bi-trash3"></i> Danger Zone</div>
+    </div>
+    <div class="panel-body" style="padding: 16px 20px;">
+      <div style="display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:12px;">
+        <div>
+          <div style="font-size:0.9rem; font-weight:600; color:var(--text-primary);">Delete this customer</div>
+          <div style="font-size:0.8rem; color:var(--text-secondary);">
+            Removes CustomerID {{ customer.CustomerID }} from Customer.csv and rebuilds the pipeline.
+            Cannot be undone if no backup exists.
+          </div>
+        </div>
+        <button type="button" class="btn-de btn-danger-de"
+                onclick="confirmDelete('{{ url_for('delete_customer', customer_id=customer.CustomerID) }}', 'CustomerID {{ customer.CustomerID }} ({{ customer.AccountNumber }})')">
+          <i class="bi bi-trash"></i> Delete Customer
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── FORM ACTIONS ───────────────────────────────── -->
+  <div style="display: flex; gap: 12px; justify-content: flex-end; padding-bottom: 40px;">
+    <a href="{{ url_for('customers') }}" class="btn-de btn-outline-de">
+      <i class="bi bi-x-lg"></i> Cancel
+    </a>
+    <button type="submit" class="btn-de btn-primary-de" id="submit-btn">
+      <i class="bi bi-save2-fill"></i> Save Changes &amp; Run Pipeline
+    </button>
+  </div>
+</form>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+  document.getElementById('edit-customer-form').addEventListener('submit', function() {
+    const btn = document.getElementById('submit-btn');
+    btn.disabled = true;
+    btn.innerHTML = '<i class="bi bi-hourglass-split"></i> Running pipeline…';
+  });
+</script>
+{% endblock %}

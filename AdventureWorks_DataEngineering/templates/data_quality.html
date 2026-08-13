@@ -1,0 +1,134 @@
+{% extends "base.html" %}
+
+{% block title %}Data Quality Rules{% endblock %}
+{% block page_title %}Data Quality Audit Engine{% endblock %}
+
+{% block content %}
+
+<!-- ── PAGE HEADER ─────────────────────────────────────── -->
+<div class="page-header">
+  <h1>Data Quality Verification</h1>
+  <p>Real-time results from Exercise 4 rules engine. The pipeline enforces structural integrity constraints at each execution.</p>
+</div>
+
+<!-- ── STAGING & VALIDATION ARCHITECTURE ─────────────────── -->
+<div class="panel" style="margin-bottom: 24px;">
+  <div class="panel-header">
+    <div class="panel-title"><i class="bi bi-hdd-network-fill"></i> Staging and Validation Architecture</div>
+  </div>
+  <div class="panel-body">
+    <div style="display:grid; grid-template-columns: 1fr 1fr; gap: 20px;">
+      <div>
+        <h4 style="color:var(--text-primary); margin-bottom: 12px; font-size: 0.9rem;">Secure Staging Areas</h4>
+        <ul style="list-style-type: none; padding-left: 0; font-size: 0.85rem; color: var(--text-secondary);">
+          <li style="margin-bottom: 8px;"><i class="bi bi-folder2-open text-accent" style="margin-right:8px;"></i> <strong>Raw Zone:</strong> <span class="code-val">staging/raw/</span> - Unaltered Parquet extracts</li>
+          <li style="margin-bottom: 8px;"><i class="bi bi-folder-check text-success" style="margin-right:8px;"></i> <strong>Valid Zone:</strong> <span class="code-val">staging/valid/</span> - Cleansed, pipeline-ready data</li>
+          <li><i class="bi bi-folder-x text-danger" style="margin-right:8px;"></i> <strong>Quarantine:</strong> <span class="code-val">staging/outliers/</span> - Rejected records for manual review</li>
+        </ul>
+      </div>
+      <div>
+        <h4 style="color:var(--text-primary); margin-bottom: 12px; font-size: 0.9rem;">Data Quality Engine Checks</h4>
+        <ul style="list-style-type: none; padding-left: 0; font-size: 0.85rem; color: var(--text-secondary);">
+          <li style="margin-bottom: 8px;"><i class="bi bi-braces text-accent" style="margin-right:8px;"></i> <strong>Schema Validation:</strong> Enforcing strict data types & constraints</li>
+          <li style="margin-bottom: 8px;"><i class="bi bi-slash-circle text-warning" style="margin-right:8px;"></i> <strong>Null Checks:</strong> Rejecting missing Primary/Foreign Keys</li>
+          <li><i class="bi bi-graph-down-arrow text-danger" style="margin-right:8px;"></i> <strong>Outlier Detection:</strong> Statistical IQR bounds (e.g., negative prices)</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ── KPI METRICS ─────────────────────────────────────── -->
+<div class="kpi-grid">
+  <div class="kpi-card blue">
+    <div class="kpi-icon"><i class="bi bi-shield-check"></i></div>
+    <div class="kpi-label">Total Rules Checked</div>
+    <div class="kpi-value">{{ total_rules }}</div>
+    <div class="kpi-sub">Default validation rules</div>
+  </div>
+  <div class="kpi-card green">
+    <div class="kpi-icon"><i class="bi bi-patch-check"></i></div>
+    <div class="kpi-label">Passed Rules</div>
+    <div class="kpi-value">{{ passed_count }}</div>
+    <div class="kpi-sub">Rules passing successfully</div>
+  </div>
+  <div class="kpi-card yellow">
+    <div class="kpi-icon"><i class="bi bi-shield-exclamation"></i></div>
+    <div class="kpi-label">Warnings</div>
+    <div class="kpi-value">{{ warn_count }}</div>
+    <div class="kpi-sub">Soft warning flags</div>
+  </div>
+  <div class="kpi-card red">
+    <div class="kpi-icon"><i class="bi bi-shield-slash"></i></div>
+    <div class="kpi-label">Errors</div>
+    <div class="kpi-value">{{ error_count }}</div>
+    <div class="kpi-sub">Hard failures (halts pipeline)</div>
+  </div>
+</div>
+
+<!-- ── RULES ENGINE RESULTS ────────────────────────────── -->
+<div class="panel">
+  <div class="panel-header">
+    <div class="panel-title">
+      <i class="bi bi-shield-fill-check"></i>
+      Rules Execution Status — Run <span class="code-val">{{ last_run_id }}</span>
+    </div>
+  </div>
+  <div class="panel-body" style="padding: 0;">
+    {% if dq_rows %}
+    <div class="table-wrapper">
+      <table class="data-table">
+        <thead>
+          <tr>
+            <th>Status</th>
+            <th>Rule ID</th>
+            <th>Table</th>
+            <th>Rule Type</th>
+            <th>Severity</th>
+            <th>Actual Value</th>
+            <th>Threshold</th>
+            <th>Message</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for r in dq_rows %}
+          <tr>
+            <td>
+              {% if r.passed == True or r.passed == 'True' or r.passed == 1 %}
+              <span class="badge-status badge-success"><i class="bi bi-check"></i> PASS</span>
+              {% else %}
+                {% if r.severity == 'ERROR' %}
+                <span class="badge-status badge-danger"><i class="bi bi-x"></i> ERROR</span>
+                {% else %}
+                <span class="badge-status badge-warning"><i class="bi bi-exclamation"></i> WARN</span>
+                {% endif %}
+              {% endif %}
+            </td>
+            <td class="mono"><strong>{{ r.rule_id }}</strong></td>
+            <td>{{ r.table }}</td>
+            <td class="mono" style="font-size: 0.75rem;">{{ r.rule_type }}</td>
+            <td>
+              {% if r.severity == 'ERROR' %}
+              <span class="text-danger font-weight-bold">ERROR</span>
+              {% else %}
+              <span class="text-warning">WARNING</span>
+              {% endif %}
+            </td>
+            <td class="mono">{{ r.actual_value }}</td>
+            <td class="mono">{{ r.threshold }}</td>
+            <td>{{ r.message }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% else %}
+    <div class="empty-state">
+      <i class="bi bi-shield-slash" style="font-size: 2.5rem; color: var(--border);"></i>
+      <p>No Data Quality reports found. Run the pipeline to populate results.</p>
+    </div>
+    {% endif %}
+  </div>
+</div>
+
+{% endblock %}

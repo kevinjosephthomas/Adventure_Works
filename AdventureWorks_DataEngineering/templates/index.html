@@ -1,0 +1,270 @@
+{% extends "base.html" %}
+
+{% block title %}Dashboard{% endblock %}
+{% block page_title %}Dashboard Overview{% endblock %}
+
+{% block content %}
+
+<!-- ── PAGE HEADER ─────────────────────────────────────── -->
+<div class="page-header flex-between">
+  <div>
+    <h1>AdventureWorks Pipeline Dashboard</h1>
+    <p>Full-Refresh Architecture · Source CSV → Pipeline → Analytics · All data reflects the latest pipeline run</p>
+  </div>
+  <div class="flex-gap">
+    <form action="{{ url_for('pipeline_run') }}" method="post">
+      {% if pipeline_running %}
+      <button type="button" class="btn-de btn-outline-de" disabled>
+        <i class="bi bi-hourglass-split"></i> Running…
+      </button>
+      {% else %}
+      <button type="submit" class="btn-de btn-success-de"
+              onclick="return confirm('Run the full pipeline now?')">
+        <i class="bi bi-play-fill"></i> Run Pipeline
+      </button>
+      {% endif %}
+    </form>
+  </div>
+</div>
+
+<!-- ── KPI CARDS ───────────────────────────────────────── -->
+<div class="kpi-grid">
+
+  <div class="kpi-card blue">
+    <div class="kpi-icon"><i class="bi bi-box-seam"></i></div>
+    <div class="kpi-label">Total Products</div>
+    <div class="kpi-value">{{ (kpis.total_products or 0) | int | format_number }}</div>
+    <div class="kpi-sub">Source CSV records</div>
+  </div>
+
+  <div class="kpi-card teal">
+    <div class="kpi-icon"><i class="bi bi-people"></i></div>
+    <div class="kpi-label">Total Customers</div>
+    <div class="kpi-value">{{ (kpis.total_customers or 0) | int | format_number }}</div>
+    <div class="kpi-sub">Unique customers</div>
+  </div>
+
+  <div class="kpi-card purple">
+    <div class="kpi-icon"><i class="bi bi-receipt"></i></div>
+    <div class="kpi-label">Total Orders</div>
+    <div class="kpi-value">{{ (kpis.total_orders or 0) | int | format_number }}</div>
+    <div class="kpi-sub">Unique SalesOrderIDs</div>
+  </div>
+
+  <div class="kpi-card green">
+    <div class="kpi-icon"><i class="bi bi-currency-dollar"></i></div>
+    <div class="kpi-label">Total Sales</div>
+    {% set ts = kpis.total_sales | float %}
+    {% if ts >= 1000000 %}
+    <div class="kpi-value small">${{ "%.2f"|format(ts/1000000) }}M</div>
+    {% else %}
+    <div class="kpi-value small">${{ "{:,.0f}".format(ts) }}</div>
+    {% endif %}
+    <div class="kpi-sub">Total LineTotal (all orders)</div>
+  </div>
+
+
+  <div class="kpi-card orange">
+    <div class="kpi-icon"><i class="bi bi-bag-check"></i></div>
+    <div class="kpi-label">Qty Sold</div>
+    <div class="kpi-value">{{ (kpis.total_qty_sold or 0) | int | format_number }}</div>
+    <div class="kpi-sub">Total OrderQty</div>
+  </div>
+
+  <div class="kpi-card red">
+    <div class="kpi-icon"><i class="bi bi-x-circle"></i></div>
+    <div class="kpi-label">Invalid Records</div>
+    <div class="kpi-value">{{ (kpis.invalid_records or 0) | int | format_number }}</div>
+    <div class="kpi-sub">Null key violations</div>
+  </div>
+
+  <div class="kpi-card yellow">
+    <div class="kpi-icon"><i class="bi bi-copy"></i></div>
+    <div class="kpi-label">Duplicates</div>
+    <div class="kpi-value">{{ (kpis.duplicate_records or 0) | int | format_number }}</div>
+    <div class="kpi-sub">Duplicate primary keys</div>
+  </div>
+
+  <div class="kpi-card yellow">
+    <div class="kpi-icon"><i class="bi bi-exclamation-diamond"></i></div>
+    <div class="kpi-label">Outliers</div>
+    <div class="kpi-value">{{ (kpis.outlier_records or 0) | int | format_number }}</div>
+    <div class="kpi-sub">IQR-flagged records</div>
+  </div>
+
+</div>
+
+<!-- ── LAST PIPELINE RUN STATUS ────────────────────────── -->
+{% if last_run %}
+<div class="panel" style="margin-bottom:24px;">
+  <div class="panel-header">
+    <div class="panel-title">
+      <i class="bi bi-diagram-3"></i>
+      Last Pipeline Execution
+    </div>
+    <a href="{{ url_for('pipeline') }}" class="btn-de btn-outline-de btn-sm-de">
+      View All Runs <i class="bi bi-arrow-right"></i>
+    </a>
+  </div>
+  <div class="panel-body">
+    <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:16px;">
+
+      <div>
+        <div class="kpi-label">Run ID</div>
+        <div class="code-val">{{ last_run.run_id or 'N/A' }}</div>
+      </div>
+      <div>
+        <div class="kpi-label">Status</div>
+        {% if last_run.status == 'SUCCESS' %}
+        <span class="badge-status badge-success"><i class="bi bi-check-circle"></i> SUCCESS</span>
+        {% elif last_run.status == 'FAILED' %}
+        <span class="badge-status badge-danger"><i class="bi bi-x-circle"></i> FAILED</span>
+        {% else %}
+        <span class="badge-status badge-muted">{{ last_run.status }}</span>
+        {% endif %}
+      </div>
+      <div>
+        <div class="kpi-label">Duration</div>
+        <div class="mono">{{ last_run.duration_sec or '—' }}s</div>
+      </div>
+      <div>
+        <div class="kpi-label">Start Time</div>
+        <div class="mono" style="font-size:0.75rem;">{{ last_run.start_time or '—' }}</div>
+      </div>
+      <div>
+        <div class="kpi-label">FactSales Rows</div>
+        <div class="mono">{{ "{:,}".format(last_run.factsales_rows | int) if last_run.factsales_rows else '—' }}</div>
+      </div>
+      <div>
+        <div class="kpi-label">Detail Records</div>
+        <div class="mono">{{ "{:,}".format(last_run.detail_records | int) if last_run.detail_records else '—' }}</div>
+      </div>
+
+    </div>
+  </div>
+</div>
+{% else %}
+<div class="panel" style="margin-bottom:24px;">
+  <div class="panel-body">
+    <div class="empty-state">
+      <i class="bi bi-diagram-3" style="color:var(--text-muted);"></i>
+      <p>No pipeline runs recorded yet.<br>
+         <a href="{{ url_for('pipeline') }}" class="btn-de btn-success-de" style="margin-top:14px;display:inline-flex;">
+           <i class="bi bi-play-fill"></i> Run Pipeline Now
+         </a>
+      </p>
+    </div>
+  </div>
+</div>
+{% endif %}
+
+<!-- ── BOTTOM ROW: Sales by Year + Audit ──────────────── -->
+<div style="display:grid;grid-template-columns:1fr 1fr;gap:24px;">
+
+  <!-- Sales by Year sparkline -->
+  <div class="panel">
+    <div class="panel-header">
+      <div class="panel-title"><i class="bi bi-bar-chart-line"></i> Annual Sales</div>
+      <a href="{{ url_for('analytics') }}" class="btn-de btn-outline-de btn-sm-de">Full Analytics →</a>
+    </div>
+    <div class="panel-body" style="padding-bottom:0;">
+      {% if sales_by_year %}
+      <div id="chart-annual-sales" style="height:220px;"></div>
+      {% else %}
+      <div class="empty-state">
+        <i class="bi bi-bar-chart"></i>
+        <p>Run the pipeline to generate chart data.</p>
+      </div>
+      {% endif %}
+    </div>
+  </div>
+
+  <!-- Recent audit log -->
+  <div class="panel">
+    <div class="panel-header">
+      <div class="panel-title"><i class="bi bi-journal-text"></i> Recent Activity</div>
+      <a href="{{ url_for('audit') }}" class="btn-de btn-outline-de btn-sm-de">View All →</a>
+    </div>
+    <div class="panel-body" style="padding:0;">
+      {% if audit_log %}
+      <table class="data-table">
+        <thead>
+          <tr>
+            <th>Action</th>
+            <th>Entity</th>
+            <th>ID</th>
+            <th>Status</th>
+            <th>Time</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for entry in audit_log[:8] %}
+          <tr>
+            <td>
+              {% if entry.action == 'ADD' %}<span class="badge-status badge-success">ADD</span>
+              {% elif entry.action == 'DELETE' %}<span class="badge-status badge-danger">DELETE</span>
+              {% elif entry.action == 'EDIT' %}<span class="badge-status badge-info">EDIT</span>
+              {% else %}<span class="badge-status badge-muted">{{ entry.action }}</span>{% endif %}
+            </td>
+            <td>{{ entry.entity }}</td>
+            <td class="mono">{{ entry.record_id }}</td>
+            <td>
+              {% if entry.status == 'SUCCESS' or entry.status == 'OK' %}
+              <i class="bi bi-check-circle text-success"></i>
+              {% else %}
+              <i class="bi bi-x-circle text-danger"></i>
+              {% endif %}
+            </td>
+            <td class="mono" style="font-size:0.7rem;color:var(--text-muted);">
+              {{ entry.timestamp[:19] if entry.timestamp else '' }}
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+      {% else %}
+      <div class="empty-state">
+        <i class="bi bi-journal"></i>
+        <p>No activity recorded yet.</p>
+      </div>
+      {% endif %}
+    </div>
+  </div>
+
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+{% if sales_by_year %}
+<script>
+(function() {
+  const data = {{ sales_by_year | tojson }};
+  const years = data.map(d => d.Year);
+  const sales = data.map(d => parseFloat(d.TotalSales) || 0);
+
+  Plotly.newPlot('chart-annual-sales', [{
+    x: years,
+    y: sales,
+    type: 'bar',
+    marker: {
+      color: sales.map((_, i) => i === sales.length - 1 ? '#00ff66' : '#1b3325'),
+      line: { color: 'rgba(0,255,102,0.3)', width: 1 }
+    },
+    text: sales.map(s => '$' + (s/1e6).toFixed(2) + 'M'),
+    textposition: 'outside',
+    textfont: { color: '#90c2a2', size: 11 },
+    hovertemplate: '<b>%{x}</b><br>$%{y:,.0f}<extra></extra>',
+  }], {
+    paper_bgcolor: 'transparent',
+    plot_bgcolor:  'transparent',
+    margin: { t: 10, b: 35, l: 50, r: 10 },
+    xaxis: { color: '#638c73', gridcolor: '#122018', tickfont: { size: 11 } },
+    yaxis: { color: '#638c73', gridcolor: '#122018', tickformat: '$,.0f', tickfont: { size: 10 } },
+    showlegend: false,
+    bargap: 0.3,
+  }, { responsive: true, displayModeBar: false });
+})();
+</script>
+{% endif %}
+{% endblock %}

@@ -1,0 +1,168 @@
+{% extends "base.html" %}
+
+{% block title %}Analytics Insights{% endblock %}
+{% block page_title %}Analytics & BI Dashboard{% endblock %}
+
+{% block content %}
+
+<!-- ── PAGE HEADER ─────────────────────────────────────── -->
+<div class="page-header">
+  <h1>Data Warehouse Insights</h1>
+  <p>Plotly visualizations built directly from the OLAP Star Schema. Analytics are refreshed on every pipeline run.</p>
+</div>
+
+<!-- ── KPI CARDS ───────────────────────────────────────── -->
+<div class="kpi-grid">
+  <div class="kpi-card blue">
+    <div class="kpi-icon"><i class="bi bi-box-seam"></i></div>
+    <div class="kpi-label">Average Order Value</div>
+    <div class="kpi-value">${{ "{:,.2f}".format(kpis.avg_order_value|float) if kpis.avg_order_value else '0.00' }}</div>
+    <div class="kpi-sub">Total sales / order count</div>
+  </div>
+  <div class="kpi-card green">
+    <div class="kpi-icon"><i class="bi bi-tag"></i></div>
+    <div class="kpi-label">Avg List Price</div>
+    <div class="kpi-value">${{ "{:,.2f}".format(kpis.avg_list_price|float) if kpis.avg_list_price else '0.00' }}</div>
+    <div class="kpi-sub">Average product list price</div>
+  </div>
+</div>
+
+<!-- ── VISUALIZATIONS GRID ─────────────────────────────── -->
+<div style="display:grid; grid-template-columns: 1fr 1fr; gap: 24px;">
+
+  <!-- Monthly Sales -->
+  <div class="panel">
+    <div class="panel-header">
+      <div class="panel-title"><i class="bi bi-graph-up-arrow"></i> Sales Trend by Month</div>
+    </div>
+    <div class="panel-body">
+      <div id="chart-monthly-sales" style="height:300px;"></div>
+    </div>
+  </div>
+
+  <!-- Color Distribution -->
+  <div class="panel">
+    <div class="panel-header">
+      <div class="panel-title"><i class="bi bi-pie-chart-fill"></i> Product Count by Color</div>
+    </div>
+    <div class="panel-body">
+      <div id="chart-product-color" style="height:300px;"></div>
+    </div>
+  </div>
+
+  <!-- Cost vs Price -->
+  <div class="panel">
+    <div class="panel-header">
+      <div class="panel-title"><i class="bi bi-scatter-plot"></i> Standard Cost vs List Price</div>
+    </div>
+    <div class="panel-body">
+      <div id="chart-cost-price" style="height:300px;"></div>
+    </div>
+  </div>
+
+  <!-- Top Products Table -->
+  <div class="panel">
+    <div class="panel-header">
+      <div class="panel-title"><i class="bi bi-trophy"></i> Top 20 Selling Products</div>
+    </div>
+    <div class="panel-body" style="padding: 0;">
+      <table class="data-table">
+        <thead>
+          <tr>
+            <th>Product Name</th>
+            <th>Color</th>
+            <th>Unit Price</th>
+            <th>Qty Sold</th>
+            <th>Total Sales</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for r in top10 %}
+          <tr>
+            <td><strong>{{ r.Name }}</strong></td>
+            <td>{{ r.Color if r.Color else '—' }}</td>
+            <td class="mono">${{ "{:,.2f}".format(r.ListPrice|float) if r.ListPrice else '0.00' }}</td>
+            <td class="mono">{{ r.TotalQty | format_number }}</td>
+            <td class="mono"><strong>${{ "{:,.2f}".format(r.TotalSales|float) }}</strong></td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+  // 1. Monthly Sales chart
+  (function() {
+    const data = {{ sales_by_month | tojson }};
+    if (!data.length) return;
+    const months = data.map(d => d.YearMonth);
+    const sales = data.map(d => parseFloat(d.TotalSales) || 0);
+
+    Plotly.newPlot('chart-monthly-sales', [{
+      x: months,
+      y: sales,
+      type: 'scatter',
+      mode: 'lines+markers',
+      line: { color: '#00ff66', width: 2.5 },
+      marker: { color: '#00e5ff', size: 6 },
+      hovertemplate: '<b>%{x}</b><br>$%{y:,.2f}<extra></extra>',
+    }], {
+      ...window.DARK_LAYOUT,
+      margin: { t: 15, b: 35, l: 60, r: 15 },
+      xaxis: { ...window.DARK_LAYOUT.xaxis, tickfont: { size: 10 } },
+      yaxis: { ...window.DARK_LAYOUT.yaxis, tickformat: '$,.0f' },
+    }, window.PLOTLY_CONFIG);
+  })();
+
+  // 2. Product Color Distribution
+  (function() {
+    const data = {{ product_by_color | tojson }};
+    if (!data.length) return;
+    const colors = data.map(d => d.Color || 'Unknown');
+    const counts = data.map(d => parseInt(d.ProductCount) || 0);
+
+    Plotly.newPlot('chart-product-color', [{
+      labels: colors,
+      values: counts,
+      type: 'pie',
+      hole: 0.4,
+      marker: { colors: window.PALETTE },
+      textinfo: 'percent',
+      hovertemplate: '<b>%{label}</b><br>%{value} products (%{percent})<extra></extra>',
+    }], {
+      ...window.DARK_LAYOUT,
+      margin: { t: 15, b: 15, l: 15, r: 15 },
+    }, window.PLOTLY_CONFIG);
+  })();
+
+  // 3. Cost vs Price Scatter
+  (function() {
+    const data = {{ cost_vs_price | tojson }};
+    if (!data.length) return;
+    const names = data.map(d => d.Name);
+    const cost = data.map(d => parseFloat(d.StandardCost) || 0);
+    const price = data.map(d => parseFloat(d.ListPrice) || 0);
+
+    Plotly.newPlot('chart-cost-price', [{
+      x: cost,
+      y: price,
+      mode: 'markers',
+      type: 'scatter',
+      text: names,
+      marker: { color: '#00ff66', size: 6, opacity: 0.7 },
+      hovertemplate: '<b>%{text}</b><br>Cost: $%{x:,.2f}<br>Price: $%{y:,.2f}<extra></extra>',
+    }], {
+      ...window.DARK_LAYOUT,
+      margin: { t: 15, b: 35, l: 60, r: 15 },
+      xaxis: { ...window.DARK_LAYOUT.xaxis, title: { text: 'Standard Cost ($)', font: { size: 10 } } },
+      yaxis: { ...window.DARK_LAYOUT.yaxis, title: { text: 'List Price ($)', font: { size: 10 } }, tickformat: '$' },
+    }, window.PLOTLY_CONFIG);
+  })();
+</script>
+{% endblock %}

@@ -1,0 +1,213 @@
+{% extends "base.html" %}
+
+{% block title %}Add Product{% endblock %}
+{% block page_title %}Add New Product Record{% endblock %}
+
+{% block content %}
+
+<!-- ── PAGE HEADER ─────────────────────────────────────── -->
+<div class="page-header">
+  <a href="{{ url_for('products') }}" class="btn-de btn-outline-de btn-sm-de mb-4">
+    <i class="bi bi-arrow-left"></i> Back to Products
+  </a>
+  <h1>Add Product to Source CSV</h1>
+  <p>Fill out the fields to append a new record directly to Product.csv. Submitting will trigger the downstream run_pipeline() to rebuild staging, OLTP, OLAP, and analytics.</p>
+</div>
+
+<!-- ── ADD FORM ────────────────────────────────────────── -->
+<div class="panel" style="max-width: 800px;">
+  <div class="panel-header">
+    <div class="panel-title"><i class="bi bi-plus-circle-fill text-success"></i> Product Details</div>
+  </div>
+  <div class="panel-body">
+    <form action="{{ url_for('add_product') }}" method="post" id="add-product-form">
+      
+      <h3 class="nav-section-label" style="padding-left:0; margin-bottom:12px; color:var(--accent);">Required Identifiers & Pricing</h3>
+      
+      <div class="form-row">
+        <div class="form-group">
+          <label class="form-label">ProductID *</label>
+          <input type="number" name="ProductID" value="{{ form.get('ProductID', '') }}" 
+                 class="form-control-de" placeholder="e.g. 505" required min="1">
+          <small class="kpi-sub" style="margin-top: 2px;">Must be a unique positive integer.</small>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Product Name *</label>
+          <input type="text" name="Name" value="{{ form.get('Name', '') }}" 
+                 class="form-control-de" placeholder="e.g. Test Adventure Product" required>
+        </div>
+      </div>
+
+      <div class="form-row">
+        <div class="form-group">
+          <label class="form-label">Product Number *</label>
+          <input type="text" name="ProductNumber" value="{{ form.get('ProductNumber', '') }}" 
+                 class="form-control-de" placeholder="e.g. TEST-505" required>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Color *</label>
+          <input type="text" name="Color" value="{{ form.get('Color', '') }}" 
+                 class="form-control-de" placeholder="e.g. Black, Red, Silver" required>
+        </div>
+      </div>
+
+      <div class="form-row">
+        <div class="form-group">
+          <label class="form-label">Standard Cost ($) *</label>
+          <input type="number" name="StandardCost" value="{{ form.get('StandardCost', '0.00') }}" 
+                 class="form-control-de" placeholder="0.00" step="0.01" min="0" required>
+        </div>
+        <div class="form-group">
+          <label class="form-label">List Price ($) *</label>
+          <input type="number" name="ListPrice" value="{{ form.get('ListPrice', '0.00') }}" 
+                 class="form-control-de" placeholder="0.00" step="0.01" min="0" required>
+        </div>
+      </div>
+
+      <h3 class="nav-section-label" style="padding-left:0; margin-top:20px; margin-bottom:12px; color:var(--accent);">Required Operational Settings</h3>
+      
+      <div class="form-row">
+        <div class="form-group">
+          <label class="form-label">Make Flag (Manufactured?) *</label>
+          <select name="MakeFlag" class="form-control-de" required style="background-color: var(--bg-elevated);">
+            <option value="0" {% if form.get('MakeFlag') == '0' %}selected{% endif %}>0 - Purchased</option>
+            <option value="1" {% if form.get('MakeFlag') == '1' %}selected{% endif %}>1 - Manufactured In-House</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Finished Goods Flag (Saleable?) *</label>
+          <select name="FinishedGoodsFlag" class="form-control-de" required style="background-color: var(--bg-elevated);">
+            <option value="0" {% if form.get('FinishedGoodsFlag') == '0' %}selected{% endif %}>0 - Component</option>
+            <option value="1" {% if form.get('FinishedGoodsFlag') == '1' or not form.get('FinishedGoodsFlag') %}selected{% endif %}>1 - Finished Saleable Good</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="form-row">
+        <div class="form-group">
+          <label class="form-label">Safety Stock Level *</label>
+          <input type="number" name="SafetyStockLevel" value="{{ form.get('SafetyStockLevel', '1000') }}" 
+                 class="form-control-de" min="1" required>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Reorder Point *</label>
+          <input type="number" name="ReorderPoint" value="{{ form.get('ReorderPoint', '750') }}" 
+                 class="form-control-de" min="1" required>
+        </div>
+      </div>
+
+      <h3 class="nav-section-label" style="padding-left:0; margin-top:20px; margin-bottom:12px; color:var(--accent);">Optional Attributes & Metadata</h3>
+
+      <div class="form-row">
+        <div class="form-group">
+          <label class="form-label">Size (optional)</label>
+          <input type="text" name="Size" value="{{ form.get('Size', '') }}" 
+                 class="form-control-de" placeholder="e.g. M, L, 42">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Weight (optional)</label>
+          <input type="number" name="Weight" value="{{ form.get('Weight', '') }}" 
+                 class="form-control-de" placeholder="0.00" step="0.01" min="0">
+        </div>
+      </div>
+
+      <div class="form-row">
+        <div class="form-group">
+          <label class="form-label">Size Unit Measure Code</label>
+          <input type="text" name="SizeUnitMeasureCode" value="{{ form.get('SizeUnitMeasureCode', '') }}" 
+                 class="form-control-de" placeholder="e.g. CM">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Weight Unit Measure Code</label>
+          <input type="text" name="WeightUnitMeasureCode" value="{{ form.get('WeightUnitMeasureCode', '') }}" 
+                 class="form-control-de" placeholder="e.g. LB">
+        </div>
+      </div>
+
+      <div class="form-row">
+        <div class="form-group">
+          <label class="form-label">Days To Manufacture</label>
+          <input type="number" name="DaysToManufacture" value="{{ form.get('DaysToManufacture', '0') }}" 
+                 class="form-control-de" min="0">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Product Line</label>
+          <input type="text" name="ProductLine" value="{{ form.get('ProductLine', '') }}" 
+                 class="form-control-de" placeholder="e.g. R, M, T, S">
+        </div>
+      </div>
+
+      <div class="form-row">
+        <div class="form-group">
+          <label class="form-label">Class</label>
+          <input type="text" name="Class" value="{{ form.get('Class', '') }}" 
+                 class="form-control-de" placeholder="e.g. H, M, L">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Style</label>
+          <input type="text" name="Style" value="{{ form.get('Style', '') }}" 
+                 class="form-control-de" placeholder="e.g. W, M, U">
+        </div>
+      </div>
+
+      <div class="form-row">
+        <div class="form-group">
+          <label class="form-label">Product Subcategory ID</label>
+          <input type="number" name="ProductSubcategoryID" value="{{ form.get('ProductSubcategoryID', '') }}" 
+                 class="form-control-de" placeholder="e.g. 1">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Product Model ID</label>
+          <input type="number" name="ProductModelID" value="{{ form.get('ProductModelID', '') }}" 
+                 class="form-control-de" placeholder="e.g. 1">
+        </div>
+      </div>
+
+      <div class="form-row">
+        <div class="form-group">
+          <label class="form-label">Sell Start Date</label>
+          <input type="text" name="SellStartDate" value="{{ form.get('SellStartDate', '') or datetime_now_str }}" 
+                 class="form-control-de" placeholder="YYYY-MM-DD HH:MM:SS" id="sell-start-date">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Sell End Date</label>
+          <input type="text" name="SellEndDate" value="{{ form.get('SellEndDate', '') }}" 
+                 class="form-control-de" placeholder="YYYY-MM-DD HH:MM:SS">
+        </div>
+      </div>
+
+      <div class="form-row">
+        <div class="form-group">
+          <label class="form-label">Discontinued Date</label>
+          <input type="text" name="DiscontinuedDate" value="{{ form.get('DiscontinuedDate', '') }}" 
+                 class="form-control-de" placeholder="YYYY-MM-DD HH:MM:SS">
+        </div>
+        <div class="form-group" style="visibility:hidden;"></div>
+      </div>
+
+      <!-- Submit button triggers modal confirmation / displays warning -->
+      <div style="margin-top: 24px; padding-top: 16px; border-top: 1px solid var(--border); display: flex; gap: 12px; justify-content: flex-end;">
+        <a href="{{ url_for('products') }}" class="btn-de btn-outline-de">Cancel</a>
+        <button type="submit" class="btn-de btn-primary-de" onclick="this.innerHTML='<i class=\'bi bi-hourglass-split\'></i> Running Pipeline...';">
+          <i class="bi bi-play-fill"></i> Add & Run Pipeline
+        </button>
+      </div>
+
+    </form>
+  </div>
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+  // Pre-fill current date if empty
+  const startDateInput = document.getElementById('sell-start-date');
+  if (startDateInput && !startDateInput.value) {
+    const d = new Date();
+    const pad = (n) => String(n).padStart(2, '0');
+    const formatted = `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())} 00:00:00.000`;
+    startDateInput.value = formatted;
+  }
+</script>
+{% endblock %}

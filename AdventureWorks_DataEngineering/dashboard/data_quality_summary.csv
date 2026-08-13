@@ -1,0 +1,6 @@
+Category,Count
+Valid Records,141641
+Invalid (Null Key),0
+Duplicates,0
+Outliers (Product),85
+Outliers (Detail),18852

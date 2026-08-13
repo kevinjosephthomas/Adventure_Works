@@ -1,0 +1,23 @@
+{% extends "base.html" %}
+
+{% block title %}500 Internal Error{% endblock %}
+{% block page_title %}Internal Server Error{% endblock %}
+
+{% block content %}
+<div class="empty-state" style="padding: 60px 20px; text-align: center;">
+  <div style="font-size: 5.5rem; font-weight: 800; color: var(--danger); line-height: 1; margin-bottom: 12px; font-family: var(--font-mono);">500</div>
+  <i class="bi bi-exclamation-triangle-fill" style="font-size: 4rem; color: var(--danger); margin-bottom: 20px; display: inline-block;"></i>
+  <h2 style="font-weight: 700; margin-bottom: 8px;">An unexpected error occurred</h2>
+  <p style="color: var(--text-secondary); max-width: 500px; margin: 0 auto 24px auto; line-height: 1.6;">
+    The server encountered an internal issue and was unable to complete your request. This has been logged for engineering review. Try triggering the pipeline again to restore stage consistencies.
+  </p>
+  <div class="flex-gap" style="justify-content: center;">
+    <a href="{{ url_for('pipeline') }}" class="btn-de btn-outline-de">
+      <i class="bi bi-gear-fill"></i> View Pipeline
+    </a>
+    <a href="{{ url_for('index') }}" class="btn-de btn-primary-de">
+      <i class="bi bi-house-door-fill"></i> Go to Dashboard
+    </a>
+  </div>
+</div>
+{% endblock %}

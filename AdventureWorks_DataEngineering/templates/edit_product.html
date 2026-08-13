@@ -1,0 +1,196 @@
+{% extends "base.html" %}
+
+{% block title %}Edit Product {{ product.ProductID }}{% endblock %}
+{% block page_title %}Edit Product Record{% endblock %}
+
+{% block content %}
+
+<!-- ── PAGE HEADER ─────────────────────────────────────── -->
+<div class="page-header">
+  <a href="{{ url_for('products') }}" class="btn-de btn-outline-de btn-sm-de mb-4">
+    <i class="bi bi-arrow-left"></i> Back to Products
+  </a>
+  <h1>Edit Product: {{ product.Name }}</h1>
+  <p>Update product fields. Save operation writes back to Product.csv and runs the batch pipeline to rebuild all databases and metrics.</p>
+</div>
+
+<!-- ── EDIT FORM ───────────────────────────────────────── -->
+<div class="panel" style="max-width: 800px;">
+  <div class="panel-header">
+    <div class="panel-title">
+      <i class="bi bi-pencil-square text-info"></i>
+      Product ID: <span class="code-val">{{ product.ProductID }}</span> (Read-Only)
+    </div>
+  </div>
+  <div class="panel-body">
+    <form action="{{ url_for('edit_product', product_id=product.ProductID) }}" method="post" id="edit-product-form">
+      
+      <!-- Hidden ProductID field so we preserve it -->
+      <input type="hidden" name="ProductID" value="{{ product.ProductID }}">
+
+      <h3 class="nav-section-label" style="padding-left:0; margin-bottom:12px; color:var(--accent);">Identifiers & Pricing</h3>
+      
+      <div class="form-row">
+        <div class="form-group">
+          <label class="form-label">Product Name *</label>
+          <input type="text" name="Name" value="{{ product.Name }}" 
+                 class="form-control-de" required>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Product Number *</label>
+          <input type="text" name="ProductNumber" value="{{ product.ProductNumber }}" 
+                 class="form-control-de" required>
+        </div>
+      </div>
+
+      <div class="form-row">
+        <div class="form-group">
+          <label class="form-label">Color *</label>
+          <input type="text" name="Color" value="{{ product.Color }}" 
+                 class="form-control-de" required>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Standard Cost ($) *</label>
+          <input type="number" name="StandardCost" value="{{ product.StandardCost }}" 
+                 class="form-control-de" step="0.01" min="0" required>
+        </div>
+      </div>
+
+      <div class="form-row">
+        <div class="form-group">
+          <label class="form-label">List Price ($) *</label>
+          <input type="number" name="ListPrice" value="{{ product.ListPrice }}" 
+                 class="form-control-de" step="0.01" min="0" required>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Weight (optional)</label>
+          <input type="number" name="Weight" value="{{ product.Weight }}" 
+                 class="form-control-de" placeholder="0.00" step="0.01" min="0">
+        </div>
+      </div>
+
+      <h3 class="nav-section-label" style="padding-left:0; margin-top:20px; margin-bottom:12px; color:var(--accent);">Operational Flags</h3>
+
+      <div class="form-row">
+        <div class="form-group">
+          <label class="form-label">Make Flag *</label>
+          <select name="MakeFlag" class="form-control-de" required style="background-color: var(--bg-elevated);">
+            <option value="0" {% if product.MakeFlag == '0' %}selected{% endif %}>0 - Purchased</option>
+            <option value="1" {% if product.MakeFlag == '1' %}selected{% endif %}>1 - Manufactured In-House</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Finished Goods Flag *</label>
+          <select name="FinishedGoodsFlag" class="form-control-de" required style="background-color: var(--bg-elevated);">
+            <option value="0" {% if product.FinishedGoodsFlag == '0' %}selected{% endif %}>0 - Component</option>
+            <option value="1" {% if product.FinishedGoodsFlag == '1' %}selected{% endif %}>1 - Finished Saleable Good</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="form-row">
+        <div class="form-group">
+          <label class="form-label">Safety Stock Level *</label>
+          <input type="number" name="SafetyStockLevel" value="{{ product.SafetyStockLevel }}" 
+                 class="form-control-de" min="1" required>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Reorder Point *</label>
+          <input type="number" name="ReorderPoint" value="{{ product.ReorderPoint }}" 
+                 class="form-control-de" min="1" required>
+        </div>
+      </div>
+
+      <h3 class="nav-section-label" style="padding-left:0; margin-top:20px; margin-bottom:12px; color:var(--accent);">Attributes & Metadata</h3>
+
+      <div class="form-row">
+        <div class="form-group">
+          <label class="form-label">Size</label>
+          <input type="text" name="Size" value="{{ product.Size }}" 
+                 class="form-control-de">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Size Unit Measure Code</label>
+          <input type="text" name="SizeUnitMeasureCode" value="{{ product.SizeUnitMeasureCode }}" 
+                 class="form-control-de">
+        </div>
+      </div>
+
+      <div class="form-row">
+        <div class="form-group">
+          <label class="form-label">Weight Unit Measure Code</label>
+          <input type="text" name="WeightUnitMeasureCode" value="{{ product.WeightUnitMeasureCode }}" 
+                 class="form-control-de">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Days To Manufacture</label>
+          <input type="number" name="DaysToManufacture" value="{{ product.DaysToManufacture }}" 
+                 class="form-control-de" min="0">
+        </div>
+      </div>
+
+      <div class="form-row">
+        <div class="form-group">
+          <label class="form-label">Product Line</label>
+          <input type="text" name="ProductLine" value="{{ product.ProductLine }}" 
+                 class="form-control-de" placeholder="e.g. R, M, T, S">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Class</label>
+          <input type="text" name="Class" value="{{ product.Class }}" 
+                 class="form-control-de" placeholder="e.g. H, M, L">
+        </div>
+      </div>
+
+      <div class="form-row">
+        <div class="form-group">
+          <label class="form-label">Style</label>
+          <input type="text" name="Style" value="{{ product.Style }}" 
+                 class="form-control-de" placeholder="e.g. W, M, U">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Product Subcategory ID</label>
+          <input type="number" name="ProductSubcategoryID" value="{{ product.ProductSubcategoryID }}" 
+                 class="form-control-de">
+        </div>
+      </div>
+
+      <div class="form-row">
+        <div class="form-group">
+          <label class="form-label">Product Model ID</label>
+          <input type="number" name="ProductModelID" value="{{ product.ProductModelID }}" 
+                 class="form-control-de">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Sell Start Date</label>
+          <input type="text" name="SellStartDate" value="{{ product.SellStartDate }}" 
+                 class="form-control-de" placeholder="YYYY-MM-DD HH:MM:SS">
+        </div>
+      </div>
+
+      <div class="form-row">
+        <div class="form-group">
+          <label class="form-label">Sell End Date</label>
+          <input type="text" name="SellEndDate" value="{{ product.SellEndDate }}" 
+                 class="form-control-de" placeholder="YYYY-MM-DD HH:MM:SS">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Discontinued Date</label>
+          <input type="text" name="DiscontinuedDate" value="{{ product.DiscontinuedDate }}" 
+                 class="form-control-de" placeholder="YYYY-MM-DD HH:MM:SS">
+        </div>
+      </div>
+
+      <!-- Action buttons -->
+      <div style="margin-top: 24px; padding-top: 16px; border-top: 1px solid var(--border); display: flex; gap: 12px; justify-content: flex-end;">
+        <a href="{{ url_for('products') }}" class="btn-de btn-outline-de">Cancel</a>
+        <button type="submit" class="btn-de btn-primary-de" onclick="this.innerHTML='<i class=\'bi bi-hourglass-split\'></i> Running Pipeline...';">
+          <i class="bi bi-play-fill"></i> Save & Run Pipeline
+        </button>
+      </div>
+
+    </form>
+  </div>
+</div>
+
+{% endblock %}

@@ -1,0 +1,192 @@
+{% extends "base.html" %}
+
+{% block title %}Add Customer{% endblock %}
+{% block page_title %}Add New Customer{% endblock %}
+
+{% block content %}
+
+<!-- ── BREADCRUMB ─────────────────────────────────────── -->
+<div style="margin-bottom: 20px; font-size:0.825rem; color:var(--text-secondary);">
+  <a href="{{ url_for('customers') }}" style="color:var(--accent); text-decoration:none;">
+    <i class="bi bi-people"></i> Customers
+  </a>
+  <i class="bi bi-chevron-right" style="margin: 0 8px; font-size:0.7rem;"></i>
+  <span>Add Customer</span>
+</div>
+
+<!-- ── PAGE HEADER ─────────────────────────────────────── -->
+<div class="page-header flex-between">
+  <div>
+    <h1>Add New Customer</h1>
+    <p>This record will be written to <span class="code-val">Customer.csv</span> and then the pipeline will be triggered automatically.</p>
+  </div>
+  <a href="{{ url_for('customers') }}" class="btn-de btn-outline-de">
+    <i class="bi bi-arrow-left"></i> Back to Customers
+  </a>
+</div>
+
+<!-- ── ARCHITECTURE CALLOUT ──────────────────────────── -->
+<div class="alert-de alert-info" style="margin-bottom: 24px;">
+  <span class="alert-icon"><i class="bi bi-diagram-3-fill"></i></span>
+  <div>
+    <strong>Data Engineering Flow:</strong>
+    Form Submit → <span class="code-val">Customer.csv</span> →
+    <span class="code-val">run_pipeline()</span> →
+    Ingestion → Validation → Transformation → OLTP → OLAP → Dashboard
+  </div>
+</div>
+
+<!-- ── FORM ──────────────────────────────────────────── -->
+<form action="{{ url_for('add_customer') }}" method="post" id="add-customer-form">
+
+  <!-- ── CUSTOMER IDENTITY ─────────────────────────── -->
+  <div class="panel" style="margin-bottom: 24px;">
+    <div class="panel-header">
+      <div class="panel-title"><i class="bi bi-person-badge"></i> Customer Identity</div>
+    </div>
+    <div class="panel-body">
+      <div style="display:grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 20px;">
+
+        <div class="form-group-de">
+          <label class="form-label-de" for="CustomerID">
+            CustomerID <span style="color:var(--danger);">*</span>
+          </label>
+          <input type="number" id="CustomerID" name="CustomerID"
+                 class="form-control-de" required min="1"
+                 value="{{ form.get('CustomerID', '') }}"
+                 placeholder="e.g. 30119">
+          <div class="form-hint-de">Unique integer — must not already exist in Customer.csv.</div>
+        </div>
+
+        <div class="form-group-de">
+          <label class="form-label-de" for="AccountNumber">AccountNumber</label>
+          <input type="text" id="AccountNumber" name="AccountNumber"
+                 class="form-control-de"
+                 value="{{ form.get('AccountNumber', '') }}"
+                 placeholder="e.g. AW00030119" maxlength="16">
+          <div class="form-hint-de">Business account number identifier.</div>
+        </div>
+
+      </div>
+    </div>
+  </div>
+
+  <!-- ── RELATIONSHIPS ─────────────────────────────── -->
+  <div class="panel" style="margin-bottom: 24px;">
+    <div class="panel-header">
+      <div class="panel-title"><i class="bi bi-diagram-2"></i> Relationships</div>
+    </div>
+    <div class="panel-body">
+      <div style="display:grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 20px;">
+
+        <div class="form-group-de">
+          <label class="form-label-de" for="PersonID">PersonID</label>
+          <input type="number" id="PersonID" name="PersonID"
+                 class="form-control-de" min="1"
+                 value="{{ form.get('PersonID', '') }}"
+                 placeholder="FK → Person table (optional)">
+          <div class="form-hint-de">Link to a Person record. Leave blank if no person.</div>
+        </div>
+
+        <div class="form-group-de">
+          <label class="form-label-de" for="StoreID">StoreID</label>
+          <input type="number" id="StoreID" name="StoreID"
+                 class="form-control-de" min="1"
+                 value="{{ form.get('StoreID', '') }}"
+                 placeholder="FK → Store (optional)">
+          <div class="form-hint-de">Link to a Store. Leave blank for individual customers.</div>
+        </div>
+
+        <div class="form-group-de">
+          <label class="form-label-de" for="TerritoryID">TerritoryID</label>
+          <input type="number" id="TerritoryID" name="TerritoryID"
+                 class="form-control-de" min="1"
+                 value="{{ form.get('TerritoryID', '') }}"
+                 placeholder="Sales territory (optional)">
+          <div class="form-hint-de">Geographic territory assignment.</div>
+        </div>
+
+      </div>
+    </div>
+  </div>
+
+  <!-- ── SYSTEM FIELDS ─────────────────────────────── -->
+  <div class="panel" style="margin-bottom: 24px;">
+    <div class="panel-header">
+      <div class="panel-title"><i class="bi bi-gear"></i> System Fields <span style="font-weight:400; color:var(--text-muted); font-size:0.8rem;">(auto-generated if left blank)</span></div>
+    </div>
+    <div class="panel-body">
+      <div style="display:grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 20px;">
+
+        <div class="form-group-de">
+          <label class="form-label-de" for="rowguid">rowguid</label>
+          <input type="text" id="rowguid" name="rowguid"
+                 class="form-control-de mono"
+                 value="{{ form.get('rowguid', '') }}"
+                 placeholder="Auto-generated UUID if blank"
+                 pattern="[0-9a-fA-F\-]{36}">
+          <div class="form-hint-de">36-char UUID e.g. A1B2C3D4-E5F6-... (auto-filled if blank)</div>
+        </div>
+
+        <div class="form-group-de">
+          <label class="form-label-de" for="ModifiedDate">ModifiedDate</label>
+          <input type="datetime-local" id="ModifiedDate" name="ModifiedDate"
+                 class="form-control-de"
+                 value="{{ form.get('ModifiedDate', '') }}">
+          <div class="form-hint-de">Timestamp of record. Auto-set to now if blank.</div>
+        </div>
+
+      </div>
+    </div>
+  </div>
+
+  <!-- ── DATA ENGINEERING INFO BOX ─────────────────── -->
+  <div class="panel" style="margin-bottom: 24px; border-top-color: var(--warning);">
+    <div class="panel-body" style="padding: 16px 20px;">
+      <div style="display:grid; grid-template-columns: auto 1fr; gap: 12px; align-items: start;">
+        <i class="bi bi-database-fill-gear" style="color:var(--warning); font-size:1.4rem;"></i>
+        <div style="font-size:0.82rem; color:var(--text-secondary); line-height:1.7;">
+          <strong style="color:var(--text-primary);">What happens when you submit:</strong><br>
+          1. The new row is appended to <span class="code-val">Customer.csv</span> (source of truth).<br>
+          2. <span class="code-val">run_pipeline()</span> is triggered synchronously.<br>
+          3. The pipeline runs: Ingestion → Validation → Transformation → OLTP → OLAP.<br>
+          4. Dashboard Parquet files are regenerated from the new OLAP fact tables.<br>
+          5. If the pipeline fails, the CSV change is rolled back automatically.
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── FORM ACTIONS ───────────────────────────────── -->
+  <div style="display: flex; gap: 12px; justify-content: flex-end; padding-bottom: 40px;">
+    <a href="{{ url_for('customers') }}" class="btn-de btn-outline-de">
+      <i class="bi bi-x-lg"></i> Cancel
+    </a>
+    <button type="submit" class="btn-de btn-primary-de" id="submit-btn">
+      <i class="bi bi-person-check-fill"></i> Add Customer &amp; Run Pipeline
+    </button>
+  </div>
+</form>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+  // Visual feedback on submit
+  document.getElementById('add-customer-form').addEventListener('submit', function() {
+    const btn = document.getElementById('submit-btn');
+    btn.disabled = true;
+    btn.innerHTML = '<i class="bi bi-hourglass-split"></i> Running pipeline…';
+  });
+
+  // CustomerID uniqueness hint (client-side cosmetic only)
+  document.getElementById('CustomerID').addEventListener('input', function() {
+    const val = parseInt(this.value);
+    if (val > 0) {
+      this.style.borderColor = 'var(--success)';
+    } else {
+      this.style.borderColor = 'var(--danger)';
+    }
+  });
+</script>
+{% endblock %}

@@ -1,0 +1,194 @@
+{% extends "base.html" %}
+
+{% block title %}Customers Management{% endblock %}
+{% block page_title %}Customer Directory{% endblock %}
+
+{% block content %}
+
+<!-- ── PAGE HEADER ─────────────────────────────────────── -->
+<div class="page-header flex-between">
+  <div>
+    <h1>Customer Directory</h1>
+    <p>Manage AdventureWorks customers. All modifications save directly to Customer.csv and trigger the batch pipeline.</p>
+  </div>
+  <div>
+    <a href="{{ url_for('add_customer') }}" class="btn-de btn-primary-de">
+      <i class="bi bi-person-plus-fill"></i> Add Customer
+    </a>
+  </div>
+</div>
+
+<!-- ── STATS STRIP ────────────────────────────────────── -->
+<div style="display:grid; grid-template-columns: repeat(4, 1fr); gap: 16px; margin-bottom: 20px;">
+  <div class="kpi-card blue" style="padding: 16px 20px;">
+    <div class="kpi-label">Total Customers</div>
+    <div class="kpi-value" style="font-size:1.6rem;">{{ total | format_number }}</div>
+    <div class="kpi-sub">in Customer.csv</div>
+  </div>
+  <div class="kpi-card green" style="padding: 16px 20px;">
+    <div class="kpi-label">Current Page</div>
+    <div class="kpi-value" style="font-size:1.6rem;">{{ page }} / {{ pages }}</div>
+    <div class="kpi-sub">25 records per page</div>
+  </div>
+  <div class="kpi-card yellow" style="padding: 16px 20px;">
+    <div class="kpi-label">Showing</div>
+    <div class="kpi-value" style="font-size:1.6rem;">{{ rows | length }}</div>
+    <div class="kpi-sub">records on this page</div>
+  </div>
+  <div class="kpi-card" style="padding: 16px 20px; border-top-color: var(--accent);">
+    <div class="kpi-label">Source File</div>
+    <div class="kpi-value" style="font-size:0.9rem; font-family:var(--font-mono); color:var(--accent);">Customer.csv</div>
+    <div class="kpi-sub">Tab-separated, no header</div>
+  </div>
+</div>
+
+<!-- ── SEARCH PANEL ──────────────────────────────────── -->
+<div class="panel" style="margin-bottom: 20px;">
+  <div class="panel-body flex-between" style="padding: 12px 20px;">
+    <!-- Client-side quick filter -->
+    <div class="search-bar">
+      <i class="bi bi-search"></i>
+      <input type="text" id="customers-search" placeholder="Quick filter by any column...">
+    </div>
+    <!-- Server-side search -->
+    <form action="{{ url_for('customers') }}" method="get" class="flex-gap">
+      <input type="text" name="q" value="{{ search }}" class="form-control-de"
+             placeholder="Search by ID or account..." style="width:220px; padding:6px 12px; font-size:0.825rem;">
+      <button type="submit" class="btn-de btn-outline-de btn-sm-de">
+        <i class="bi bi-funnel"></i> Filter
+      </button>
+      {% if search %}
+      <a href="{{ url_for('customers') }}" class="btn-de btn-outline-de btn-sm-de text-danger">
+        <i class="bi bi-x"></i> Clear
+      </a>
+      {% endif %}
+    </form>
+  </div>
+</div>
+
+<!-- ── DATA TABLE ──────────────────────────────────────── -->
+<div class="panel">
+  <div class="panel-body" style="padding: 0;">
+    {% if rows %}
+    <div class="table-wrapper">
+      <table class="data-table" id="customers-table">
+        <thead>
+          <tr>
+            <th>Actions</th>
+            <th>CustomerID</th>
+            <th>AccountNumber</th>
+            <th>PersonID</th>
+            <th>StoreID</th>
+            <th>TerritoryID</th>
+            <th>rowguid</th>
+            <th>ModifiedDate</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for r in rows %}
+          <tr>
+            <td>
+              <div class="flex-gap gap-2">
+                <a href="{{ url_for('edit_customer', customer_id=r.CustomerID) }}"
+                   class="btn-de btn-outline-de btn-sm-de" title="Edit customer record">
+                  <i class="bi bi-pencil-square text-info"></i>
+                </a>
+                <button type="button" class="btn-de btn-danger-de btn-sm-de"
+                        onclick="confirmDelete('{{ url_for('delete_customer', customer_id=r.CustomerID) }}', 'CustomerID {{ r.CustomerID }} ({{ r.AccountNumber }})')"
+                        title="Delete customer">
+                  <i class="bi bi-trash"></i>
+                </button>
+              </div>
+            </td>
+            <td class="mono font-weight-bold">{{ r.CustomerID }}</td>
+            <td>
+              <span class="badge-status badge-info mono" style="font-size:0.75rem;">{{ r.AccountNumber if r.AccountNumber else '—' }}</span>
+            </td>
+            <td class="mono">{{ r.PersonID if r.PersonID else '—' }}</td>
+            <td class="mono">{{ r.StoreID if r.StoreID else '—' }}</td>
+            <td>
+              {% if r.TerritoryID %}
+              <span class="badge-status badge-muted">{{ r.TerritoryID }}</span>
+              {% else %}
+              <span class="text-muted">—</span>
+              {% endif %}
+            </td>
+            <td class="mono" style="font-size: 0.68rem; color: var(--text-muted); max-width: 200px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
+              {{ r.rowguid if r.rowguid else '—' }}
+            </td>
+            <td class="mono" style="font-size: 0.75rem; color: var(--text-secondary);">
+              {{ r.ModifiedDate[:10] if r.ModifiedDate else '—' }}
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+
+    <!-- Pagination -->
+    <div class="pagination-de">
+      {% if page > 1 %}
+      <a href="{{ url_for('customers', page=page-1, q=search) }}" class="page-btn">
+        <i class="bi bi-chevron-left"></i>
+      </a>
+      {% endif %}
+
+      {% set start_page = [page - 2, 1] | max %}
+      {% set end_page   = [start_page + 4, pages] | min %}
+      {% for p in range(start_page, end_page + 1) %}
+        {% if p == page %}
+        <span class="page-btn active">{{ p }}</span>
+        {% else %}
+        <a href="{{ url_for('customers', page=p, q=search) }}" class="page-btn">{{ p }}</a>
+        {% endif %}
+      {% endfor %}
+
+      {% if page < pages %}
+      <a href="{{ url_for('customers', page=page+1, q=search) }}" class="page-btn">
+        <i class="bi bi-chevron-right"></i>
+      </a>
+      {% endif %}
+
+      <span style="color:var(--text-secondary); font-size:0.8rem; margin-left:12px;">
+        Page <strong>{{ page }}</strong> of <strong>{{ pages }}</strong>
+        &nbsp;·&nbsp; <strong>{{ total | format_number }}</strong> customers total
+      </span>
+    </div>
+
+    {% else %}
+    <div class="empty-state">
+      <i class="bi bi-people" style="font-size: 3rem; color: var(--border);"></i>
+      <p>No customers found{% if search %} matching <strong>"{{ search }}"</strong>{% endif %}.</p>
+      {% if search %}
+      <a href="{{ url_for('customers') }}" class="btn-de btn-outline-de btn-sm-de">Clear filter</a>
+      {% endif %}
+    </div>
+    {% endif %}
+  </div>
+</div>
+
+<!-- ── DATA ENGINEERING NOTE ──────────────────────────── -->
+<div class="panel" style="margin-top: 20px;">
+  <div class="panel-body" style="padding: 16px 20px;">
+    <div style="display: flex; gap: 16px; align-items: flex-start;">
+      <i class="bi bi-info-circle-fill" style="color:var(--accent); font-size:1.2rem; margin-top:2px; flex-shrink:0;"></i>
+      <div style="font-size:0.825rem; color:var(--text-secondary); line-height:1.6;">
+        <strong style="color:var(--text-primary);">Data Engineering Architecture:</strong>
+        All customer modifications (Add / Edit / Delete) write directly to
+        <span class="code-val">Customer.csv</span> and then trigger
+        <span class="code-val">run_pipeline()</span>, which re-runs the full
+        Ingestion → Validation → Transformation → OLTP → OLAP → Dashboard chain.
+        Flask <em>never</em> touches the PostgreSQL database directly.
+        Every action is logged in the <a href="{{ url_for('audit') }}" style="color:var(--accent);">Audit Log</a>.
+      </div>
+    </div>
+  </div>
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+  initTableSearch('customers-search', 'customers-table');
+</script>
+{% endblock %}

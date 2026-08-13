@@ -1,0 +1,94 @@
+{% extends "base.html" %}
+
+{% block title %}Audit Trail{% endblock %}
+{% block page_title %}Operational Audit Logs{% endblock %}
+
+{% block content %}
+
+<!-- ── PAGE HEADER ─────────────────────────────────────── -->
+<div class="page-header">
+  <h1>Data Modification Logs</h1>
+  <p>Track all data engineering operations performed from the Flask interface. Every insert, update, and delete is recorded.</p>
+</div>
+
+<!-- ── AUDIT LOG TABLE ─────────────────────────────────── -->
+<div class="panel">
+  <div class="panel-header">
+    <div class="panel-title"><i class="bi bi-journal-text"></i> System Audit Trail</div>
+  </div>
+  <div class="panel-body" style="padding: 0;">
+    {% if log %}
+    <div class="table-wrapper">
+      <table class="data-table">
+        <thead>
+          <tr>
+            <th>Timestamp</th>
+            <th>Action</th>
+            <th>Entity</th>
+            <th>Record ID</th>
+            <th>Pipeline Run ID</th>
+            <th>Status</th>
+            <th>Old Value</th>
+            <th>New Value</th>
+            <th>Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for r in log %}
+          <tr>
+            <td class="mono">{{ r.timestamp }}</td>
+            <td>
+              {% if r.action == 'ADD' %}<span class="badge-status badge-success">ADD</span>
+              {% elif r.action == 'DELETE' %}<span class="badge-status badge-danger">DELETE</span>
+              {% elif r.action == 'EDIT' %}<span class="badge-status badge-info">EDIT</span>
+              {% else %}<span class="badge-status badge-muted">{{ r.action }}</span>{% endif %}
+            </td>
+            <td><strong>{{ r.entity }}</strong></td>
+            <td class="mono font-weight-bold">{{ r.record_id }}</td>
+            <td class="mono">{{ r.pipeline_run_id if r.pipeline_run_id else 'N/A' }}</td>
+            <td>
+              {% if r.status == 'SUCCESS' or r.status == 'OK' %}
+              <span class="text-success"><i class="bi bi-check-circle-fill"></i> SUCCESS</span>
+              {% else %}
+              <span class="text-danger"><i class="bi bi-x-circle-fill"></i> FAILED</span>
+              {% endif %}
+            </td>
+            <td>
+              {% if r.old_value %}
+              <pre class="mono" style="font-size:0.7rem; margin:0; max-height:80px; overflow-y:auto; padding:4px; background:var(--bg-elevated); border:1px solid var(--border);">{{ r.old_value | tojson(indent=1) }}</pre>
+              {% else %}
+              <span class="text-muted">—</span>
+              {% endif %}
+            </td>
+            <td>
+              {% if r.new_value %}
+              <pre class="mono" style="font-size:0.7rem; margin:0; max-height:80px; overflow-y:auto; padding:4px; background:var(--bg-elevated); border:1px solid var(--border);">{{ r.new_value | tojson(indent=1) }}</pre>
+              {% else %}
+              <span class="text-muted">—</span>
+              {% endif %}
+            </td>
+            <td>
+              <form action="{{ url_for('pipeline_run') }}" method="post" style="display:inline;">
+                <input type="hidden" name="replay_fix" value="true">
+                <button type="submit" class="btn-de btn-outline-de btn-sm-de"
+                        title="Replay Pipeline to Backfill Historical Data"
+                        onclick="return confirm('Simulate a backfill by replaying the pipeline execution from this state?');">
+                  <i class="bi bi-rewind-fill text-accent"></i> Replay
+                </button>
+              </form>
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% else %}
+    <div class="empty-state">
+      <i class="bi bi-journal-x" style="font-size: 2.5rem; color: var(--border);"></i>
+      <p>No operational logs recorded yet.</p>
+    </div>
+    {% endif %}
+  </div>
+</div>
+
+{% endblock %}

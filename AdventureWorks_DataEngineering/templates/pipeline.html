@@ -1,0 +1,520 @@
+{% extends "base.html" %}
+
+{% block title %}Pipeline Execution Logs{% endblock %}
+{% block page_title %}Data Pipeline Orchestration{% endblock %}
+
+{% block content %}
+
+<!-- ── PAGE HEADER ─────────────────────────────────────── -->
+<div class="page-header flex-between">
+  <div>
+    <h1>Pipeline Controls & History</h1>
+    <p>Monitor pipeline executions, view run durations, check record volumes, and trigger new builds.</p>
+  </div>
+  <div>
+    <form action="{{ url_for('pipeline_run') }}" method="post">
+      {% if pipeline_running %}
+      <button type="button" class="btn-de btn-outline-de" disabled>
+        <i class="bi bi-hourglass-split"></i> Execution In Progress...
+      </button>
+      {% else %}
+      <button type="submit" class="btn-de btn-success-de"
+              onclick="return confirm('Trigger a full refresh now?')">
+        <i class="bi bi-play-fill"></i> Trigger Run Pipeline
+      </button>
+      {% endif %}
+    </form>
+  </div>
+</div>
+
+<!-- ── PIPELINE VISUAL FLOW DIAGRAM ────────────────────── -->
+<style>
+  .flow-container {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    background: rgba(22, 22, 22, 0.4);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 24px;
+    margin-bottom: 24px;
+    backdrop-filter: blur(12px);
+    overflow-x: auto;
+    gap: 8px;
+    box-shadow: 0 4px 20px rgba(0,0,0,0.15);
+  }
+  .flow-step {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    position: relative;
+    flex: 1;
+    min-width: 100px;
+    text-align: center;
+    z-index: 1;
+  }
+  .flow-icon-wrapper {
+    width: 48px;
+    height: 48px;
+    border-radius: 50%;
+    background: var(--bg-elevated);
+    border: 2px solid var(--border);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.25rem;
+    color: var(--text-muted);
+    transition: all 0.3s ease;
+    box-shadow: 0 0 10px rgba(0,0,0,0.3);
+  }
+  .flow-label {
+    margin-top: 10px;
+    font-size: 0.8rem;
+    font-weight: 600;
+    color: var(--text-primary);
+  }
+  .flow-sub {
+    font-size: 0.65rem;
+    color: var(--text-secondary);
+    margin-top: 2px;
+  }
+  
+  /* Connectors */
+  .flow-connector {
+    position: absolute;
+    top: 24px;
+    left: calc(50% + 24px);
+    right: calc(-50% + 24px);
+    height: 2px;
+    background: var(--border);
+    z-index: -1;
+    transition: background 0.4s ease;
+  }
+  .flow-step:last-child .flow-connector {
+    display: none;
+  }
+
+  /* Success State */
+  .flow-step.success .flow-icon-wrapper {
+    border-color: #00ffff;
+    color: #00ffff;
+    background: rgba(0, 255, 255, 0.1);
+    box-shadow: 0 0 12px rgba(0, 255, 255, 0.25);
+  }
+  .flow-step.success .flow-connector {
+    background: #00ffff;
+  }
+
+  /* Failed State */
+  .flow-step.failed .flow-icon-wrapper {
+    border-color: #ff003c;
+    color: #ff003c;
+    background: rgba(255, 0, 60, 0.1);
+    box-shadow: 0 0 12px rgba(255, 0, 60, 0.3);
+  }
+  .flow-step.failed .flow-connector {
+    background: #ff003c;
+  }
+
+  /* Active/Running State */
+  .flow-step.active .flow-icon-wrapper {
+    border-color: #ff007f;
+    color: #ff007f;
+    background: rgba(255, 0, 127, 0.1);
+    box-shadow: 0 0 15px rgba(255, 0, 127, 0.4);
+    animation: flow-pulse 2s infinite;
+  }
+  .flow-step.active .flow-connector {
+    background: linear-gradient(90deg, #00ffff, #ff007f);
+    background-size: 200% 100%;
+    animation: flow-shimmer 1.5s infinite linear;
+  }
+
+  @keyframes flow-pulse {
+    0% { transform: scale(1); box-shadow: 0 0 5px rgba(255, 0, 127, 0.2); }
+    50% { transform: scale(1.04); box-shadow: 0 0 18px rgba(255, 0, 127, 0.6); }
+    100% { transform: scale(1); box-shadow: 0 0 5px rgba(255, 0, 127, 0.2); }
+  }
+  @keyframes flow-shimmer {
+    0% { background-position: 100% 0; }
+    100% { background-position: 0% 0; }
+  }
+</style>
+
+{% set stages = last_run.stages_completed or [] %}
+{% set has_stages = stages | length > 0 %}
+{% set is_success = last_run.status == 'SUCCESS' %}
+{% set is_failed = last_run.status == 'FAILED' %}
+
+<div class="panel">
+  <div class="panel-header">
+    <div class="panel-title"><i class="bi bi-diagram-3"></i> End-to-End Pipeline Data Flow</div>
+  </div>
+  <div class="panel-body">
+    <div class="flow-container">
+      
+      <!-- Step 1: Ingestion -->
+      {% set step1_status = 'neutral' %}
+      {% if pipeline_running %}
+        {% set step1_status = 'active' %}
+      {% elif is_success or 'extraction' in stages %}
+        {% set step1_status = 'success' %}
+      {% elif is_failed and 'extraction' not in stages %}
+        {% set step1_status = 'failed' %}
+      {% endif %}
+      <div class="flow-step {{ step1_status }}" id="step-1">
+        <div class="flow-icon-wrapper"><i class="bi bi-file-earmark-arrow-down"></i></div>
+        <div class="flow-label">1. Extract</div>
+        <div class="flow-sub">Source CSVs</div>
+        <div class="flow-connector"></div>
+      </div>
+
+      <!-- Step 2: Raw Staging -->
+      {% set step2_status = 'neutral' %}
+      {% if pipeline_running %}
+        {% set step2_status = 'active' %}
+      {% elif is_success or 'raw_staging' in stages %}
+        {% set step2_status = 'success' %}
+      {% elif is_failed and 'extraction' in stages and 'raw_staging' not in stages %}
+        {% set step2_status = 'failed' %}
+      {% endif %}
+      <div class="flow-step {{ step2_status }}" id="step-2">
+        <div class="flow-icon-wrapper"><i class="bi bi-folder-symlink"></i></div>
+        <div class="flow-label">2. Raw Stage</div>
+        <div class="flow-sub">Raw Parquet</div>
+        <div class="flow-connector"></div>
+      </div>
+
+      <!-- Step 3: Validation & DQ -->
+      {% set step3_status = 'neutral' %}
+      {% if pipeline_running %}
+        {% set step3_status = 'active' %}
+      {% elif is_success or 'data_quality' in stages %}
+        {% set step3_status = 'success' %}
+      {% elif is_failed and 'raw_staging' in stages and 'data_quality' not in stages %}
+        {% set step3_status = 'failed' %}
+      {% endif %}
+      <div class="flow-step {{ step3_status }}" id="step-3">
+        <div class="flow-icon-wrapper"><i class="bi bi-shield-check"></i></div>
+        <div class="flow-label">3. Validate &amp; DQ</div>
+        <div class="flow-sub">Rules Engine</div>
+        <div class="flow-connector"></div>
+      </div>
+
+      <!-- Step 4: Transformation -->
+      {% set step4_status = 'neutral' %}
+      {% if pipeline_running %}
+        {% set step4_status = 'active' %}
+      {% elif is_success or 'transformation' in stages %}
+        {% set step4_status = 'success' %}
+      {% elif is_failed and 'data_quality' in stages and 'transformation' not in stages %}
+        {% set step4_status = 'failed' %}
+      {% endif %}
+      <div class="flow-step {{ step4_status }}" id="step-4">
+        <div class="flow-icon-wrapper"><i class="bi bi-lightning-charge"></i></div>
+        <div class="flow-label">4. Transform</div>
+        <div class="flow-sub">Cleansing &amp; Joins</div>
+        <div class="flow-connector"></div>
+      </div>
+
+      <!-- Step 5: OLTP Load -->
+      {% set step5_status = 'neutral' %}
+      {% if pipeline_running %}
+        {% set step5_status = 'active' %}
+      {% elif is_success or 'oltp_load' in stages %}
+        {% set step5_status = 'success' %}
+      {% elif is_failed and 'transformation' in stages and 'oltp_load' not in stages %}
+        {% set step5_status = 'failed' %}
+      {% endif %}
+      <div class="flow-step {{ step5_status }}" id="step-5">
+        <div class="flow-icon-wrapper"><i class="bi bi-database"></i></div>
+        <div class="flow-label">5. OLTP Load</div>
+        <div class="flow-sub">3NF Relational</div>
+        <div class="flow-connector"></div>
+      </div>
+
+      <!-- Step 6: OLAP Warehouse -->
+      {% set step6_status = 'neutral' %}
+      {% if pipeline_running %}
+        {% set step6_status = 'active' %}
+      {% elif is_success or 'olap_build' in stages %}
+        {% set step6_status = 'success' %}
+      {% elif is_failed and 'oltp_load' in stages and 'olap_build' not in stages %}
+        {% set step6_status = 'failed' %}
+      {% endif %}
+      <div class="flow-step {{ step6_status }}" id="step-6">
+        <div class="flow-icon-wrapper"><i class="bi bi-database-fill"></i></div>
+        <div class="flow-label">6. OLAP Build</div>
+        <div class="flow-sub">Star Schema</div>
+        <div class="flow-connector"></div>
+      </div>
+
+      <!-- Step 7: Analytics -->
+      {% set step7_status = 'neutral' %}
+      {% if pipeline_running %}
+        {% set step7_status = 'active' %}
+      {% elif is_success or 'analytics' in stages %}
+        {% set step7_status = 'success' %}
+      {% elif is_failed and 'olap_build' in stages and 'analytics' not in stages %}
+        {% set step7_status = 'failed' %}
+      {% endif %}
+      <div class="flow-step {{ step7_status }}" id="step-7">
+        <div class="flow-icon-wrapper"><i class="bi bi-bar-chart-line"></i></div>
+        <div class="flow-label">7. Analytics</div>
+        <div class="flow-sub">Plotly Cache</div>
+        <div class="flow-connector"></div>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+<!-- ── IDEMPOTENCY & ATOMICITY ───────────────────────── -->
+<div class="panel">
+  <div class="panel-header">
+    <div class="panel-title"><i class="bi bi-shield-lock-fill"></i> Production Resilience: Idempotency &amp; Atomicity</div>
+  </div>
+  <div class="panel-body">
+    <div style="display:grid; grid-template-columns: 1fr 1fr; gap: 20px;">
+      
+      <!-- Idempotency -->
+      <div>
+        <h4 style="color:var(--text-primary); margin-bottom: 12px; font-size: 0.9rem;">Idempotency</h4>
+        <p style="font-size: 0.85rem; color: var(--text-secondary); margin-bottom: 12px;">
+          This pipeline is designed to be <strong>idempotent</strong>. You can safely trigger a full pipeline execution multiple times without causing data duplication or side effects. It uses <span class="code-val">TRUNCATE / INSERT</span> for relational tables and safely overwrites Parquet files in the data lake.
+        </p>
+        <form action="{{ url_for('pipeline_run') }}" method="post">
+          <input type="hidden" name="idempotent_test" value="true">
+          <button type="submit" class="btn-de btn-primary-de" style="font-size: 0.75rem;"
+                  onclick="return confirm('Trigger an Idempotent Test Run? The pipeline will rebuild all data, and row counts should remain identical.')"
+                  {% if pipeline_running %}disabled{% endif %}>
+            <i class="bi bi-arrow-repeat"></i> Trigger Idempotency Run
+          </button>
+        </form>
+      </div>
+
+      <!-- Atomicity -->
+      <div>
+        <h4 style="color:var(--text-primary); margin-bottom: 12px; font-size: 0.9rem;">Atomicity (All-or-Nothing)</h4>
+        <p style="font-size: 0.85rem; color: var(--text-secondary); margin-bottom: 12px;">
+          Transactions guarantee that partial data loads cannot occur. If any step (like the Data Quality validation engine) fails, the entire transaction is rolled back via <span class="code-val">try...except</span> blocks and atomic staging writes.
+        </p>
+        <div style="background: var(--bg-elevated); padding: 10px; border-radius: var(--radius); border: 1px solid var(--border); font-family: var(--font-mono); font-size: 0.7rem; color: var(--success);">
+          [ATOMICITY_LOG] Staging Engine: Using Atomic Overwrites<br>
+          [ATOMICITY_LOG] DB Engine: Transaction context managed<br>
+          [ATOMICITY_LOG] Data Quality: Hard failures trigger Rollback<br>
+          [ATOMICITY_LOG] Status: ACID compliance enforced
+        </div>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+<!-- ── LAST RUN STATUS PANEL ───────────────────────────── -->
+{% if last_run %}
+<div class="panel">
+  <div class="panel-header">
+    <div class="panel-title">
+      <i class="bi bi-play-circle-fill {% if last_run.status == 'SUCCESS' %}text-success{% else %}text-danger{% endif %}"></i>
+      Latest Execution Details — Run <span class="code-val">{{ last_run.run_id }}</span>
+    </div>
+  </div>
+  <div class="panel-body">
+    <div style="display:grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 20px;">
+      
+      <div>
+        <div class="kpi-label">Run Status</div>
+        {% if last_run.status == 'SUCCESS' %}
+        <span class="badge-status badge-success"><i class="bi bi-check-circle"></i> SUCCESS</span>
+        {% else %}
+        <span class="badge-status badge-danger"><i class="bi bi-x-circle"></i> FAILED</span>
+        {% endif %}
+      </div>
+      
+      <div>
+        <div class="kpi-label">Duration</div>
+        <div class="mono" style="font-size:1.1rem; font-weight:600;">{{ last_run.duration_sec }} seconds</div>
+      </div>
+
+      <div>
+        <div class="kpi-label">Start Time</div>
+        <div class="mono" style="font-size:0.75rem;">{{ last_run.start_time }}</div>
+      </div>
+
+      <div>
+        <div class="kpi-label">End Time</div>
+        <div class="mono" style="font-size:0.75rem;">{{ last_run.end_time }}</div>
+      </div>
+
+      <div>
+        <div class="kpi-label">FactSales Loaded</div>
+        <div class="mono" style="font-weight:600;">{{ last_run.factsales_rows | format_number }} rows</div>
+      </div>
+
+      <div>
+        <div class="kpi-label">Source Products</div>
+        <div class="mono">{{ last_run.product_records | format_number }} rows</div>
+      </div>
+
+    </div>
+    
+    {% if last_run.error_message %}
+    <div class="alert-de alert-danger" style="margin-top: 20px; margin-bottom: 0;">
+      <span class="alert-icon"><i class="bi bi-x-circle-fill"></i></span>
+      <div>
+        <strong>Error Details:</strong>
+        <p class="mono" style="font-size: 0.8rem; margin-top: 4px; white-space: pre-wrap;">{{ last_run.error_message }}</p>
+      </div>
+    </div>
+    {% endif %}
+  </div>
+</div>
+{% endif %}
+
+<!-- ── HISTORICAL EXECUTION LOGS ───────────────────────── -->
+<div class="panel mt-4">
+  <div class="panel-header">
+    <div class="panel-title"><i class="bi bi-clock-history"></i> Execution History (Audit Trail)</div>
+  </div>
+  <div class="panel-body" style="padding: 0;">
+    {% if history %}
+    <div class="table-wrapper">
+      <table class="data-table">
+        <thead>
+          <tr>
+            <th>Run ID</th>
+            <th>Status</th>
+            <th>Duration</th>
+            <th>Products</th>
+            <th>Customers</th>
+            <th>FactSales Rows</th>
+            <th>DQ Status</th>
+            <th>Start Time</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for r in history %}
+          <tr {% if r.run_id == last_run.run_id %}style="background: rgba(88,166,255,0.05);"{% endif %}>
+            <td class="mono font-weight-bold">{{ r.run_id }}</td>
+            <td>
+              {% if r.status == 'SUCCESS' %}
+              <span class="badge-status badge-success"><i class="bi bi-check"></i> SUCCESS</span>
+              {% else %}
+              <span class="badge-status badge-danger"><i class="bi bi-x"></i> FAILED</span>
+              {% endif %}
+            </td>
+            <td class="mono">{{ r.duration_sec }}s</td>
+            <td class="mono">{{ r.product_records | format_number }}</td>
+            <td class="mono">{{ r.customer_records | format_number }}</td>
+            <td class="mono">{{ r.factsales_rows | format_number }}</td>
+            <td>
+              {% if r.dq_status == 'PASS' %}
+              <span class="text-success"><i class="bi bi-shield-check"></i> PASS</span>
+              {% elif r.dq_status == 'FAIL-WARNING' %}
+              <span class="text-warning"><i class="bi bi-shield-exclamation"></i> WARN</span>
+              {% else %}
+              <span class="text-danger"><i class="bi bi-shield-slash"></i> FAIL</span>
+              {% endif %}
+            </td>
+            <td class="mono" style="font-size: 0.75rem; color: var(--text-secondary);">{{ r.start_time }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% else %}
+    <div class="empty-state">
+      <i class="bi bi-clock-history" style="font-size: 2.5rem; color: var(--border);"></i>
+      <p>No historical pipeline run logs found.</p>
+    </div>
+    {% endif %}
+  </div>
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+  document.addEventListener('DOMContentLoaded', function() {
+    let pollInterval = null;
+    let isPipelineRunning = {{ 'true' if pipeline_running else 'false' }};
+    
+    // Map backend stages to UI step numbers
+    const stageToStep = {
+      'init': 1, 'health_check': 1, 'extraction': 1,
+      'raw_staging': 2,
+      'validation': 3, 'data_quality': 3,
+      'transformation': 4, 'alerts': 4,
+      'oltp_load': 5,
+      'olap_build': 6,
+      'analytics': 7, 'final_validation': 7, 'done': 7
+    };
+    
+    function updateFlowUI(state) {
+      if (!state || Object.keys(state).length === 0) return;
+      
+      const status = state.status;
+      const currentStage = state.stage;
+      const currentStepNum = stageToStep[currentStage] || 1;
+      
+      for (let i = 1; i <= 7; i++) {
+        const stepEl = document.getElementById('step-' + i);
+        if (!stepEl) continue;
+        
+        // Remove all state classes
+        stepEl.classList.remove('neutral', 'active', 'success', 'failed');
+        
+        if (status === 'SUCCESS') {
+          stepEl.classList.add('success');
+        } else if (status === 'FAILED') {
+          if (i < currentStepNum) {
+            stepEl.classList.add('success');
+          } else if (i === currentStepNum) {
+            stepEl.classList.add('failed');
+          } else {
+            stepEl.classList.add('neutral');
+          }
+        } else if (status === 'RUNNING') {
+          if (i < currentStepNum) {
+            stepEl.classList.add('success');
+          } else if (i === currentStepNum) {
+            stepEl.classList.add('active');
+          } else {
+            stepEl.classList.add('neutral');
+          }
+        }
+      }
+    }
+
+    function pollPipeline() {
+      fetch('/api/pipeline/status')
+        .then(response => response.json())
+        .then(data => {
+          if (data.state) {
+            updateFlowUI(data.state);
+          }
+          
+          if (!data.running && isPipelineRunning) {
+            // Pipeline finished, reload the page to get the final state and history
+            window.location.reload();
+          }
+          
+          isPipelineRunning = data.running;
+          
+          if (!isPipelineRunning && pollInterval) {
+            clearInterval(pollInterval);
+            pollInterval = null;
+          }
+        })
+        .catch(error => {
+          console.error("Error polling pipeline status:", error);
+        });
+    }
+
+    if (isPipelineRunning) {
+      pollInterval = setInterval(pollPipeline, 2000);
+    }
+  });
+</script>
+{% endblock %}

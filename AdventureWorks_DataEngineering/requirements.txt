@@ -6,6 +6,7 @@
 # Core Data Processing
 pandas>=2.0.0
 numpy>=1.24.0
+pyarrow>=12.0.0
 
 # PySpark (local mode, no cluster needed)
 pyspark>=3.4.0

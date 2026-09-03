@@ -132,7 +132,10 @@ class TestStageRaw:
 
     @pytest.mark.unit
     def test_stage_raw_returns_path_dict(self, tmp_path):
-        """stage_raw() must return a dict mapping table names to file Paths."""
+        """
+        stage_raw() must return a dict mapping the 4 table names to file Paths.
+        Mocks DataFrame.to_parquet to avoid requiring pyarrow in the test env.
+        """
         mock_df = pd.DataFrame({"id": [1, 2], "name": ["a", "b"]})
         raw = {
             "product":          mock_df,
@@ -141,28 +144,54 @@ class TestStageRaw:
             "salesorderdetail": mock_df,
         }
 
-        # Patch STAGING_RAW to write to tmp_path instead of real staging/
-        with patch.object(ingestion, "STAGING_RAW", tmp_path):
-            with patch("ingestion.ensure_directories"):
-                paths = stage_raw(raw)
+        with patch.object(pd.DataFrame, "to_parquet"), \
+             patch.object(ingestion, "STAGING_RAW", tmp_path), \
+             patch("ingestion.ensure_directories"):
+            paths = stage_raw(raw)
 
         assert isinstance(paths, dict)
         assert set(paths.keys()) == {"product", "customer", "salesorderheader", "salesorderdetail"}
 
     @pytest.mark.unit
-    def test_stage_raw_writes_parquet_files(self, tmp_path):
-        """stage_raw() must write a .parquet file for each table."""
+    def test_stage_raw_calls_to_parquet_for_each_table(self, tmp_path):
+        """
+        stage_raw() must call to_parquet exactly 4 times — once per source table.
+        Uses mock to verify call count without requiring pyarrow.
+        """
         mock_df = pd.DataFrame({"id": [1], "value": [100.0]})
         raw = {
-            "product":          mock_df,
-            "customer":         mock_df,
-            "salesorderheader": mock_df,
-            "salesorderdetail": mock_df,
+            "product":          mock_df.copy(),
+            "customer":         mock_df.copy(),
+            "salesorderheader": mock_df.copy(),
+            "salesorderdetail": mock_df.copy(),
         }
 
-        with patch.object(ingestion, "STAGING_RAW", tmp_path):
-            with patch("ingestion.ensure_directories"):
-                stage_raw(raw)
+        with patch.object(pd.DataFrame, "to_parquet") as mock_parquet, \
+             patch.object(ingestion, "STAGING_RAW", tmp_path), \
+             patch("ingestion.ensure_directories"):
+            stage_raw(raw)
 
-        parquet_files = list(tmp_path.glob("*.parquet"))
-        assert len(parquet_files) == 4, f"Expected 4 parquet files, found {len(parquet_files)}"
+        assert mock_parquet.call_count == 4, \
+            f"Expected to_parquet called 4 times, got {mock_parquet.call_count}"
+
+    @pytest.mark.unit
+    def test_stage_raw_paths_have_parquet_extension(self, tmp_path):
+        """
+        Every path returned by stage_raw() must end with '.parquet'.
+        """
+        mock_df = pd.DataFrame({"id": [1]})
+        raw = {
+            "product":          mock_df.copy(),
+            "customer":         mock_df.copy(),
+            "salesorderheader": mock_df.copy(),
+            "salesorderdetail": mock_df.copy(),
+        }
+
+        with patch.object(pd.DataFrame, "to_parquet"), \
+             patch.object(ingestion, "STAGING_RAW", tmp_path), \
+             patch("ingestion.ensure_directories"):
+            paths = stage_raw(raw)
+
+        for table, path in paths.items():
+            assert str(path).endswith(".parquet"), \
+                f"Path for '{table}' does not end with .parquet: {path}"

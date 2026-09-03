@@ -1,0 +1,201 @@
+# ============================================================
+# .github/workflows/cd.yml
+# AdventureWorks Data Engineering Pipeline
+#
+# Continuous Deployment Workflow
+#
+# Triggered on:
+#   - Push to `main` ONLY (i.e. after a PR is merged)
+#
+# Purpose:
+#   Gate the deployment with a final test run, validate the
+#   pipeline configuration, package the pipeline source code
+#   as a versioned ZIP artifact, and create a GitHub Release.
+#
+# Steps:
+#   1.  Checkout code
+#   2.  Set up Python 3.11
+#   3.  Cache + install dependencies
+#   4.  GATE: Run full test suite (must pass 100%)
+#   5.  Validate pipeline config (dry-run import)
+#   6.  Extract version from git tag or commit SHA
+#   7.  Package src/ + requirements.txt as pipeline_artifact_<sha>.zip
+#   8.  Upload ZIP as workflow artifact
+#   9.  Create GitHub Release with the packaged artifact
+#   10. Post deployment summary to job log
+# ============================================================
+
+name: CD — Package & Release
+
+on:
+  push:
+    branches:
+      - main     # Only run on main — this is the production deployment trigger
+
+permissions:
+  contents: write   # Required to create GitHub Releases
+
+jobs:
+  deploy:
+    name: Deploy Pipeline to Production
+    runs-on: ubuntu-latest
+
+    defaults:
+      run:
+        working-directory: AdventureWorks_DataEngineering
+
+    steps:
+      # ── 1. Checkout ─────────────────────────────────────────
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0          # Full history for tag detection
+
+      # ── 2. Python setup ─────────────────────────────────────
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      # ── 3. Cache + Install dependencies ─────────────────────
+      - name: Cache pip packages
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/pip
+          key: pip-${{ runner.os }}-py3.11-${{ hashFiles('AdventureWorks_DataEngineering/requirements.txt') }}
+          restore-keys: |
+            pip-${{ runner.os }}-py3.11-
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      # ── 4. GATE: Full test suite ─────────────────────────────
+      - name: 🔐 Deployment gate — Run full test suite
+        run: |
+          pytest tests/ \
+            -v \
+            --tb=short \
+            --cov=src \
+            --cov-report=term-missing \
+            --cov-fail-under=60
+        env:
+          PYTHONDONTWRITEBYTECODE: "1"
+
+      # ── 5. Config validation (dry-run) ───────────────────────
+      - name: Validate pipeline configuration
+        run: |
+          python -c "
+          import sys
+          sys.path.insert(0, 'src')
+          try:
+              from config import (
+                  SOURCE_FILES, STAGING_RAW, STAGING_VALID, LOGS_DIR,
+                  PRODUCT_COLUMNS, CUSTOMER_COLUMNS,
+                  SALESORDERHEADER_COLUMNS, SALESORDERDETAIL_COLUMNS,
+              )
+              print('✅ config.py imported successfully')
+              print(f'   PRODUCT_COLUMNS    : {len(PRODUCT_COLUMNS)} columns')
+              print(f'   CUSTOMER_COLUMNS   : {len(CUSTOMER_COLUMNS)} columns')
+              print(f'   HEADER_COLUMNS     : {len(SALESORDERHEADER_COLUMNS)} columns')
+              print(f'   DETAIL_COLUMNS     : {len(SALESORDERDETAIL_COLUMNS)} columns')
+          except Exception as e:
+              print(f'❌ Config validation failed: {e}')
+              sys.exit(1)
+          "
+
+      # ── 6. Determine version ─────────────────────────────────
+      - name: Determine release version
+        id: version
+        run: |
+          # Use latest tag if available, otherwise use short SHA
+          TAG=$(git describe --tags --exact-match 2>/dev/null || echo "")
+          if [ -n "$TAG" ]; then
+            VERSION="$TAG"
+          else
+            SHA=$(git rev-parse --short HEAD)
+            VERSION="dev-${SHA}"
+          fi
+          echo "version=${VERSION}" >> $GITHUB_OUTPUT
+          echo "sha=$(git rev-parse --short HEAD)" >> $GITHUB_OUTPUT
+          echo "🏷️ Release version: ${VERSION}"
+
+      # ── 7. Package pipeline artifacts ───────────────────────
+      - name: Package pipeline source code
+        run: |
+          cd ..   # Step up to repo root
+          ZIP_NAME="pipeline_artifact_${{ steps.version.outputs.sha }}.zip"
+          echo "📦 Creating ${ZIP_NAME} ..."
+          zip -r "${ZIP_NAME}" \
+            AdventureWorks_DataEngineering/src/ \
+            AdventureWorks_DataEngineering/requirements.txt \
+            AdventureWorks_DataEngineering/pytest.ini \
+            AdventureWorks_DataEngineering/CONTRIBUTING.md \
+            AdventureWorks_DataEngineering/tests/ \
+            --exclude "**/__pycache__/*" \
+            --exclude "**/*.pyc" \
+            --exclude "**/.pytest_cache/*"
+          echo "zip_name=${ZIP_NAME}" >> $GITHUB_ENV
+          ls -lh "${ZIP_NAME}"
+
+      # ── 8. Upload ZIP artifact ───────────────────────────────
+      - name: Upload pipeline artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: pipeline-artifact-${{ steps.version.outputs.sha }}
+          path: pipeline_artifact_${{ steps.version.outputs.sha }}.zip
+          retention-days: 90
+
+      # ── 9. Create GitHub Release ─────────────────────────────
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: "release/${{ steps.version.outputs.version }}"
+          name: "Pipeline Release ${{ steps.version.outputs.version }}"
+          body: |
+            ## AdventureWorks Data Engineering Pipeline Release
+
+            **Version**: `${{ steps.version.outputs.version }}`
+            **Commit**: `${{ steps.version.outputs.sha }}`
+            **Branch**: `main`
+
+            ### What's Included
+            - `src/` — All pipeline source modules (ingestion, validation, transformation, OLTP, OLAP, analytics)
+            - `tests/` — Full unit & integration test suite
+            - `requirements.txt` — Pinned dependencies
+            - `pytest.ini` — Test configuration
+            - `CONTRIBUTING.md` — Git branching strategy & contribution guide
+
+            ### Deployment
+            ```bash
+            # Unzip and install
+            unzip pipeline_artifact_${{ steps.version.outputs.sha }}.zip
+            cd AdventureWorks_DataEngineering
+            pip install -r requirements.txt
+
+            # Run tests
+            pytest tests/ -v
+
+            # Run the pipeline
+            python run_pipeline.py
+            ```
+          files: |
+            pipeline_artifact_${{ steps.version.outputs.sha }}.zip
+          draft: false
+          prerelease: ${{ !startsWith(steps.version.outputs.version, 'v') }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      # ── 10. Deployment summary ───────────────────────────────
+      - name: Post deployment summary
+        run: |
+          echo "## 🚀 Deployment Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Field | Value |" >> $GITHUB_STEP_SUMMARY
+          echo "|-------|-------|" >> $GITHUB_STEP_SUMMARY
+          echo "| **Version** | \`${{ steps.version.outputs.version }}\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| **Commit SHA** | \`${{ steps.version.outputs.sha }}\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| **Branch** | \`main\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| **Artifact** | \`pipeline_artifact_${{ steps.version.outputs.sha }}.zip\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| **Status** | ✅ Released |" >> $GITHUB_STEP_SUMMARY

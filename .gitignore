@@ -1,0 +1,91 @@
+# ============================================================
+# .gitignore — AdventureWorks Data Engineering Pipeline
+# ============================================================
+
+# ── Python ──────────────────────────────────────────────────
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+*.egg
+*.egg-info/
+dist/
+build/
+.eggs/
+*.whl
+pip-wheel-metadata/
+.installed.cfg
+
+# Virtual environments
+.venv/
+venv/
+env/
+ENV/
+.env/
+
+# ── Secrets & Config ─────────────────────────────────────────
+.env
+.env.*
+*.secrets
+secrets.yaml
+secrets.json
+config_local.py
+
+# ── Jupyter ──────────────────────────────────────────────────
+.ipynb_checkpoints/
+*.ipynb_checkpoints
+
+# ── Data Engineering Artifacts ──────────────────────────────
+# Raw and processed data (never commit large data files)
+*.parquet
+*.csv
+*.tsv
+*.xlsx
+*.xls
+*.json.gz
+*.pickle
+*.pkl
+
+# Staging directories (generated at runtime)
+staging/
+staging/raw/
+staging/valid/
+
+# Delta Lake
+delta_log/
+_delta_log/
+
+# ── Logs ─────────────────────────────────────────────────────
+logs/
+*.log
+*.log.*
+pipeline_runs.json
+
+# ── Testing & Coverage ───────────────────────────────────────
+.pytest_cache/
+.coverage
+coverage.xml
+htmlcov/
+*.cover
+.hypothesis/
+
+# ── Type Checking ────────────────────────────────────────────
+.mypy_cache/
+.dmypy.json
+dmypy.json
+.pytype/
+
+# ── IDEs ─────────────────────────────────────────────────────
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# ── OS ───────────────────────────────────────────────────────
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# ── Build / CI Artifacts ─────────────────────────────────────
+pipeline_artifact_*.zip

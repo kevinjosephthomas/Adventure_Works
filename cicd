@@ -1,0 +1,132 @@
+# CI/CD & Version Control — Implementation Walkthrough
+
+## Summary
+
+Implemented a complete, professional-grade CI/CD system for the AdventureWorks Data Engineering Pipeline across **12 files** (9 new, 3 modified). All **73 unit and integration tests pass** in under 1 second.
+
+---
+
+## Test Results ✅
+
+```
+============================= 73 passed in 0.95s ==============================
+Exit code: 0
+```
+
+| Module | Tests | Coverage |
+|---|---|---|
+| `transformation.py` | 29 tests (helpers + product + customer + sales + agg) | **77%** |
+| `pipeline.py` | 6 integration smoke tests | **90%** |
+| `data_quality.py` | 28 tests (dataclasses + all 6 rule evaluators) | **56%** |
+| `ingestion.py` | 8 tests (read, metadata, extract_all, stage_raw) | **51%** |
+| `config.py` | — (imported) | 59% |
+
+---
+
+## Files Created / Modified
+
+### Git Repository Setup
+
+| File | Status | Purpose |
+|---|---|---|
+| [.gitignore](file:///f:/DE_CAT_1/.gitignore) | NEW | Excludes `.parquet`, `staging/`, `logs/`, `.env`, secrets, IDE files |
+| [CONTRIBUTING.md](file:///f:/DE_CAT_1/AdventureWorks_DataEngineering/CONTRIBUTING.md) | NEW | Full Git branching strategy, commit conventions, PR workflow, CI/CD docs |
+
+### Test Infrastructure
+
+| File | Status | Purpose |
+|---|---|---|
+| [pytest.ini](file:///f:/DE_CAT_1/AdventureWorks_DataEngineering/pytest.ini) | NEW | Test discovery, markers (`unit`, `integration`, `slow`), short traceback |
+| [requirements.txt](file:///f:/DE_CAT_1/AdventureWorks_DataEngineering/requirements.txt) | MODIFIED | Added `pytest>=7.4`, `pytest-cov>=4.1`, `flake8>=6.1` |
+| [tests/__init__.py](file:///f:/DE_CAT_1/AdventureWorks_DataEngineering/tests/__init__.py) | NEW | Makes `tests/` a Python package |
+| [tests/conftest.py](file:///f:/DE_CAT_1/AdventureWorks_DataEngineering/tests/conftest.py) | NEW | Shared pytest fixtures: 6 synthetic DataFrames (no real CSV needed) |
+
+### Unit Tests
+
+| File | Status | Tests | What's Tested |
+|---|---|---|---|
+| [test_transformation.py](file:///f:/DE_CAT_1/AdventureWorks_DataEngineering/tests/test_transformation.py) | NEW | 29 | Helpers, `transform_product`, `transform_customer`, `transform_sales`, `build_aggregations` |
+| [test_ingestion.py](file:///f:/DE_CAT_1/AdventureWorks_DataEngineering/tests/test_ingestion.py) | NEW | 8 | `_read_csv` (FileNotFoundError, metadata columns), `extract_all`, `stage_raw` |
+| [test_data_quality.py](file:///f:/DE_CAT_1/AdventureWorks_DataEngineering/tests/test_data_quality.py) | NEW | 28 | `DQRule`, `DQResult`, all 6 rule evaluators, `DEFAULT_RULES` sanity checks |
+| [test_pipeline_integration.py](file:///f:/DE_CAT_1/AdventureWorks_DataEngineering/tests/test_pipeline_integration.py) | NEW | 6 | `run_pipeline()` report shape, SUCCESS/FAILED transitions, error propagation |
+
+### GitHub Actions Workflows
+
+| File | Trigger | Purpose |
+|---|---|---|
+| [ci.yml](file:///f:/DE_CAT_1/.github/workflows/ci.yml) | Every push + PR to `main`/`develop` | Lint (flake8) → pytest → coverage report upload |
+| [cd.yml](file:///f:/DE_CAT_1/.github/workflows/cd.yml) | Push to `main` only | Test gate → config validation → ZIP package → GitHub Release |
+| [pr_validation.yml](file:///f:/DE_CAT_1/.github/workflows/pr_validation.yml) | PR open/update to `main`/`develop` | PR title format → test file coverage check → PR comment |
+
+---
+
+## Git Branching Strategy (Summary)
+
+```
+main          ← protected, production-ready, only merged via PR
+│
+develop       ← integration branch, all features merge here first
+│
+├── feature/<name>   → PR to develop (squash merge)
+├── fix/<name>       → PR to develop (squash merge)
+└── hotfix/<name>    → PR to main + back-merge to develop
+```
+
+**Branch naming**: `feature/add-incremental-load`, `fix/null-customer-id-handling`
+
+**Commit format** (Conventional Commits):
+```
+feat(transformation): add margin column to product aggregation
+fix(ingestion): handle BOM-encoded CSV files
+test(data_quality): add boundary tests for null ratio rule
+```
+
+---
+
+## How to Run Tests Locally
+
+```bash
+cd f:\DE_CAT_1\AdventureWorks_DataEngineering
+
+# Run all tests
+pytest tests/ -v
+
+# Run with coverage
+pytest tests/ -v --cov=src --cov-report=term-missing
+
+# Run only unit tests (skip integration)
+pytest tests/ -v -m unit
+
+# Run a single test file
+pytest tests/test_transformation.py -v
+
+# Run a specific test
+pytest tests/test_transformation.py::TestTransformProduct::test_drops_null_product_id -v
+```
+
+---
+
+## CI/CD Flow Diagram
+
+```
+Developer Push / PR
+        │
+        ▼
+  [ci.yml — Every Branch]
+  ├─ flake8 lint (blocking for syntax errors)
+  ├─ pytest 73 tests ✅
+  └─ Upload coverage.xml artifact
+        │
+        │ (PR merged to main)
+        ▼
+  [cd.yml — Main Only]
+  ├─ 🔐 Gate: Full test suite must pass
+  ├─ Config dry-run validation
+  ├─ Package src/ → pipeline_artifact_<sha>.zip
+  └─ Create GitHub Release with artifact
+        
+  [pr_validation.yml — Every PR]
+  ├─ Validate title: type(scope): description
+  ├─ Check new src/*.py files have tests/test_*.py
+  └─ Post summary comment on PR
+```

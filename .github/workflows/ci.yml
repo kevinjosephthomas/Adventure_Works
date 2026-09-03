@@ -1,0 +1,143 @@
+# ============================================================
+# .github/workflows/ci.yml
+# AdventureWorks Data Engineering Pipeline
+#
+# Continuous Integration Workflow
+#
+# Triggered on:
+#   - Push to any branch
+#   - Pull request targeting main or develop
+#
+# Steps:
+#   1. Checkout code
+#   2. Set up Python 3.11 (pinned for reproducibility)
+#   3. Cache pip dependencies (speeds up subsequent runs ~60%)
+#   4. Install all dependencies (including pytest + flake8)
+#   5. Lint with flake8 (fail fast on syntax errors)
+#   6. Run unit + integration tests with coverage
+#   7. Upload coverage XML as build artifact
+#   8. Post coverage summary to the job log
+# ============================================================
+
+name: CI — Lint & Test
+
+on:
+  push:
+    branches:
+      - "**"                      # Triggers on every branch push
+  pull_request:
+    branches:
+      - main
+      - develop
+
+# Cancel in-progress runs when a new push arrives on the same branch
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  lint-and-test:
+    name: Lint & Unit Tests (Python ${{ matrix.python-version }})
+    runs-on: ubuntu-latest
+
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.11"]   # Pin to the version used in production
+
+    defaults:
+      run:
+        working-directory: AdventureWorks_DataEngineering
+
+    steps:
+      # ── 1. Checkout ─────────────────────────────────────────
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      # ── 2. Python setup ─────────────────────────────────────
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      # ── 3. Dependency cache ─────────────────────────────────
+      - name: Cache pip packages
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/pip
+          key: pip-${{ runner.os }}-py${{ matrix.python-version }}-${{ hashFiles('AdventureWorks_DataEngineering/requirements.txt') }}
+          restore-keys: |
+            pip-${{ runner.os }}-py${{ matrix.python-version }}-
+
+      # ── 4. Install dependencies ─────────────────────────────
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      # ── 5. Lint with flake8 ─────────────────────────────────
+      # stop the build if there are Python syntax errors or undefined names
+      - name: Lint — flake8 (syntax errors + undefined names)
+        run: |
+          flake8 src/ tests/ \
+            --count \
+            --select=E9,F63,F7,F82 \
+            --show-source \
+            --statistics
+        continue-on-error: false   # Fatal: syntax errors block the test run
+
+      # Report style warnings separately (non-blocking)
+      - name: Lint — flake8 (style warnings, non-blocking)
+        run: |
+          flake8 src/ tests/ \
+            --count \
+            --max-line-length=120 \
+            --max-complexity=12 \
+            --ignore=E501,W503 \
+            --statistics
+        continue-on-error: true    # Style issues are warnings, not failures
+
+      # ── 6. Run tests with coverage ──────────────────────────
+      - name: Run tests — pytest with coverage
+        run: |
+          pytest tests/ \
+            -v \
+            --tb=short \
+            --cov=src \
+            --cov-report=xml:coverage.xml \
+            --cov-report=term-missing \
+            --cov-fail-under=30
+        env:
+          # Prevent transformation.py from trying to write to staging/
+          PYTHONDONTWRITEBYTECODE: "1"
+
+      # ── 7. Upload coverage report ────────────────────────────
+      - name: Upload coverage XML artifact
+        uses: actions/upload-artifact@v4
+        if: always()               # Upload even if tests fail (for debugging)
+        with:
+          name: coverage-report-py${{ matrix.python-version }}
+          path: AdventureWorks_DataEngineering/coverage.xml
+          retention-days: 14
+
+      # ── 8. Coverage summary in job log ──────────────────────
+      - name: Print coverage summary
+        if: always()
+        run: |
+          echo "## Coverage Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| File | Coverage |" >> $GITHUB_STEP_SUMMARY
+          echo "|------|----------|" >> $GITHUB_STEP_SUMMARY
+          python -c "
+          import xml.etree.ElementTree as ET, sys
+          try:
+              tree = ET.parse('coverage.xml')
+              root = tree.getroot()
+              for pkg in root.iter('package'):
+                  for cls in pkg.iter('class'):
+                      name = cls.get('filename', 'unknown')
+                      rate = float(cls.get('line-rate', 0)) * 100
+                      print(f'| {name} | {rate:.0f}% |')
+          except Exception as e:
+              print(f'| (could not parse coverage.xml) | - |')
+          " >> $GITHUB_STEP_SUMMARY

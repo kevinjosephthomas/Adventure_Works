@@ -14,7 +14,7 @@ Prior to this update, Customer CRUD actions wrote directly to the source `Custom
 * **Catch-All Exception Guards:** Every customer and product CRUD route now has catch-all `except Exception as e:` blocks. Unexpected file permissions or DB issues will be logged and flashed safely without crashing the server.
 
 ---
-
+ 
 ## 2. Custom Dashboard Error Handler Views
 
 Rather than showing default browser warnings or exposing raw tracebacks, Flask now handles HTTP errors with beautiful themed templates that match the rest of the dark dashboard layout.

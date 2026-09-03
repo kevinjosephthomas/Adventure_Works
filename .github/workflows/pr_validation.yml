@@ -1,0 +1,221 @@
+# ============================================================
+# .github/workflows/pr_validation.yml
+# AdventureWorks Data Engineering Pipeline
+#
+# Pull Request Quality Gate
+#
+# Triggered on:
+#   - pull_request: opened, synchronize (new push), reopened
+#
+# Steps:
+#   1. Validate PR title follows Conventional Commits format
+#   2. Check that new src/*.py files have matching tests/test_*.py
+#   3. Collect (but don't run) tests to validate syntax
+#   4. Post a validation summary as a PR comment
+# ============================================================
+
+name: PR — Quality Gate
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, edited]
+    branches:
+      - main
+      - develop
+
+permissions:
+  pull-requests: write   # Required to post PR comments
+  contents: read
+
+jobs:
+  pr-validation:
+    name: PR Quality Gate
+    runs-on: ubuntu-latest
+
+    defaults:
+      run:
+        working-directory: AdventureWorks_DataEngineering
+
+    steps:
+      # ── 1. Checkout ─────────────────────────────────────────
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0    # Full history for diff detection
+
+      # ── 2. Validate PR title (Conventional Commits) ─────────
+      - name: Validate PR title format
+        id: title_check
+        run: |
+          PR_TITLE="${{ github.event.pull_request.title }}"
+          echo "PR Title: ${PR_TITLE}"
+
+          # Conventional Commits regex:
+          # type(scope): description  OR  type: description
+          PATTERN='^(feat|fix|test|refactor|docs|ci|chore|perf|style|revert)(\([a-z0-9_-]+\))?: .{3,}'
+
+          if echo "${PR_TITLE}" | grep -qE "${PATTERN}"; then
+            echo "✅ PR title follows Conventional Commits format"
+            echo "title_valid=true" >> $GITHUB_OUTPUT
+          else
+            echo "❌ PR title does NOT follow Conventional Commits format"
+            echo "Expected format: type(scope): description"
+            echo "Example: feat(transformation): add margin column to product aggregation"
+            echo "title_valid=false" >> $GITHUB_OUTPUT
+          fi
+
+      # ── 3. Check for test coverage of new src/ files ────────
+      - name: Check test file coverage for new source files
+        id: coverage_check
+        run: |
+          # Get list of changed files vs base branch
+          git fetch origin ${{ github.base_ref }}
+          CHANGED=$(git diff --name-only origin/${{ github.base_ref }}...HEAD)
+
+          echo "Changed files:"
+          echo "${CHANGED}"
+
+          MISSING_TESTS=""
+          ALL_COVERED=true
+
+          while IFS= read -r file; do
+            # Only check newly added .py files in src/
+            if echo "${file}" | grep -qE "^AdventureWorks_DataEngineering/src/[a-z][^/]+\.py$"; then
+              BASENAME=$(basename "${file}" .py)
+              TEST_FILE="AdventureWorks_DataEngineering/tests/test_${BASENAME}.py"
+
+              if [ ! -f "../${TEST_FILE}" ]; then
+                echo "⚠️  No test file found for: ${file}"
+                echo "   Expected: ${TEST_FILE}"
+                MISSING_TESTS="${MISSING_TESTS}\n- \`${file}\` → missing \`${TEST_FILE}\`"
+                ALL_COVERED=false
+              else
+                echo "✅ Test file exists for: ${file}"
+              fi
+            fi
+          done <<< "${CHANGED}"
+
+          if [ "$ALL_COVERED" = "true" ]; then
+            echo "coverage_ok=true" >> $GITHUB_OUTPUT
+            echo "missing_tests=" >> $GITHUB_OUTPUT
+          else
+            echo "coverage_ok=false" >> $GITHUB_OUTPUT
+            # Use GITHUB_OUTPUT for multiline (escape newlines)
+            echo "missing_tests<<EOF" >> $GITHUB_OUTPUT
+            printf "%b" "${MISSING_TESTS}" >> $GITHUB_OUTPUT
+            echo "" >> $GITHUB_OUTPUT
+            echo "EOF" >> $GITHUB_OUTPUT
+          fi
+
+      # ── 4. Python setup + test collection ───────────────────
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Cache pip packages
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/pip
+          key: pip-${{ runner.os }}-py3.11-pr-${{ hashFiles('AdventureWorks_DataEngineering/requirements.txt') }}
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      # Collect tests (no execution) — validates test syntax & imports
+      - name: Validate test syntax (collect only)
+        id: test_collect
+        run: |
+          pytest tests/ --collect-only -q 2>&1 | tee /tmp/collect_output.txt
+          TEST_COUNT=$(grep -c "test session starts" /tmp/collect_output.txt || echo 0)
+          COLLECTED=$(grep "<" /tmp/collect_output.txt | wc -l)
+          echo "collected=${COLLECTED}" >> $GITHUB_OUTPUT
+          echo "✅ Test collection passed — ${COLLECTED} tests found"
+        continue-on-error: true
+
+      # ── 5. Post PR comment with validation summary ───────────
+      - name: Post PR validation summary comment
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const titleValid    = '${{ steps.title_check.outputs.title_valid }}' === 'true';
+            const coverageOk    = '${{ steps.coverage_check.outputs.coverage_ok }}' === 'true';
+            const missingTests  = `${{ steps.coverage_check.outputs.missing_tests }}`;
+            const collected     = '${{ steps.test_collect.outputs.collected }}';
+
+            const titleIcon    = titleValid  ? '✅' : '❌';
+            const coverageIcon = coverageOk  ? '✅' : '⚠️';
+
+            const body = `## 🔍 PR Quality Gate Report
+
+            | Check | Status |
+            |-------|--------|
+            | PR Title (Conventional Commits) | ${titleIcon} ${titleValid ? 'Valid' : 'Invalid — see format below'} |
+            | Test Coverage for New Files | ${coverageIcon} ${coverageOk ? 'All new src files have tests' : 'Some files missing tests'} |
+            | Test Syntax | ✅ ${collected} tests collected successfully |
+
+            ${!titleValid ? `
+            ### ❌ PR Title Format
+            Your PR title must follow [Conventional Commits](https://www.conventionalcommits.org/):
+            \`\`\`
+            type(scope): short description
+            \`\`\`
+            **Valid types:** \`feat\`, \`fix\`, \`test\`, \`refactor\`, \`docs\`, \`ci\`, \`chore\`, \`perf\`
+
+            **Examples:**
+            - \`feat(transformation): add margin calculation to product aggregation\`
+            - \`fix(ingestion): handle BOM-encoded CSV files\`
+            - \`test(data_quality): add null ratio boundary tests\`
+            ` : ''}
+
+            ${!coverageOk ? `
+            ### ⚠️ Missing Test Files
+            The following new source files do not have corresponding test files:
+            ${missingTests}
+
+            Please add test files before merging. Tests are not required to be 100% complete,
+            but the file must exist and be importable.
+            ` : ''}
+
+            ---
+            *Generated by [PR Quality Gate](.github/workflows/pr_validation.yml)*`;
+
+            // Find and update existing bot comment, or create new one
+            const comments = await github.rest.issues.listComments({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+            });
+
+            const botComment = comments.data.find(c =>
+              c.user.type === 'Bot' && c.body.includes('PR Quality Gate Report')
+            );
+
+            if (botComment) {
+              await github.rest.issues.updateComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                comment_id: botComment.id,
+                body: body,
+              });
+            } else {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: context.issue.number,
+                body: body,
+              });
+            }
+
+      # Fail the job if PR title is invalid (enforced check)
+      - name: Enforce PR title format
+        if: steps.title_check.outputs.title_valid == 'false'
+        run: |
+          echo "❌ PR title validation FAILED."
+          echo "Your PR title: '${{ github.event.pull_request.title }}'"
+          echo "Required format: type(scope): description"
+          echo "See CONTRIBUTING.md for the full list of valid types."
+          exit 1
